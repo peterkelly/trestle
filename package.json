@@ -1,0 +1,26 @@
+{
+  "name": "trestle",
+  "version": "0.0.1",
+  "private": "true",
+  "description": "",
+  "main": "dist/main.js",
+  "scripts": {
+    "setup": "npm install",
+    "build": "gulp",
+    "clean": "rimraf dist node_modules"
+  },
+  "keywords": [],
+  "author": "Peter Kelly <peter@pmkelly.net>",
+  "license": "Apache-2.0",
+  "devDependencies": {
+    "@types/node": "9.4.1",
+    "del": "3.0.0",
+    "gulp": "3.9.1",
+    "gulp-tslint": "8.1.2",
+    "gulp-typescript": "3.2.4",
+    "merge2": "1.2.1",
+    "run-sequence": "2.2.1",
+    "tslint": "5.9.1",
+    "typescript": "2.7.1"
+  }
+}
