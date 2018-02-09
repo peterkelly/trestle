@@ -5,6 +5,9 @@
     "outDir": "../dist",
     "declaration": true,
     "strict": true,
+    "noImplicitAny": true,
+    "noImplicitThis": true,
+    "noImplicitReturns": true,
     "lib": [
         "es2015"
     ]
