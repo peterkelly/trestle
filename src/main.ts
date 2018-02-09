@@ -14,7 +14,8 @@
 
 import * as fs from "fs";
 import { Parser } from "./parse";
-import { SExpr, PairExpr } from "./sexpr";
+import { SExpr, BuildError } from "./sexpr";
+import { SourceCoords, SourceInput, testSourceCoords } from "./source";
 
 // console.log("Hello World");
 // const p = new Parser("(test 1 2 3)");
@@ -26,14 +27,36 @@ function main(): void {
         process.exit(1);
     }
 
+    if ((process.argv.length >= 3) && (process.argv[2] === "--test")) {
+        testSourceCoords();
+        process.exit(0);
+    }
+
     const filename = process.argv[2];
-    const inputRaw = fs.readFileSync(filename, { encoding: "utf-8" });
-    const input = "(" + inputRaw + ")";
+    const input = fs.readFileSync(filename, { encoding: "utf-8" });
     const p = new Parser(input);
-    let list: SExpr = p.parseList();
-    while (list instanceof PairExpr) {
-        list.car.dump("");
-        list = list.cdr;
+
+    try {
+        const items = p.parseTopLevel();
+        for (const item of items) {
+            item.dump("");
+            const built = item.build();
+            console.log("" + built);
+        }
+    }
+    catch (e) {
+        if (e instanceof BuildError) {
+            const sinput = new SourceInput(input);
+            const startCoords = sinput.coordsFromLocation(e.range.start);
+            const endCoords = sinput.coordsFromLocation(e.range.end);
+            console.log(filename + " (" + startCoords.line + "," + startCoords.col + ")-" +
+                "(" + endCoords.line + "," + endCoords.col + "): " + e.detail);
+            const hltext = sinput.highlightRange(e.range);
+            console.log(hltext);
+        }
+        else {
+            throw e;
+        }
     }
 }
 

@@ -21,6 +21,10 @@ import {
     PairExpr,
     NilExpr,
 } from "./sexpr";
+import {
+    SourceLocation,
+    SourceRange,
+} from "./source";
 
 function isDigitChar(c: string): boolean {
     return ((c.length === 1) && (c >= "0") && (c <= "9"));
@@ -55,11 +59,11 @@ function isSymbolChar(c: string): boolean {
 }
 
 class ParseError extends Error {
-    public readonly pos: number;
+    public readonly location: SourceLocation;
     public readonly detail: string;
-    public constructor(pos: number, detail: string) {
-        super("position " + pos + ": " + detail);
-        this.pos = pos;
+    public constructor(location: SourceLocation, detail: string) {
+        super(location + ": " + detail);
+        this.location = location;
         this.detail = detail;
     }
 }
@@ -75,12 +79,20 @@ export class Parser {
         this.pos = 0;
     }
 
+    public getLocation(): SourceLocation {
+        return new SourceLocation(this.pos);
+    }
+
+    public getRangeFrom(start: SourceLocation): SourceRange {
+        return new SourceRange(start, this.getLocation());
+    }
+
     public matchWhitespace(): void {
         if ((this.pos < this.len) && isWhitespaceChar(this.input[this.pos])) {
             this.skipWhitespace();
         }
         else {
-            throw new ParseError(this.pos, "Expected whitespace");
+            throw new ParseError(this.getLocation(), "Expected whitespace");
         }
     }
 
@@ -99,30 +111,33 @@ export class Parser {
             while ((this.pos < this.len) && this.input[this.pos].match(/^[0-9]$/))
                 this.pos++;
             if (this.pos === decimalPartStart)
-                throw new ParseError(this.pos, "Malformed number: " + this.input.substring(start, this.pos));
+                throw new ParseError(this.getLocation(), "Malformed number: " + this.input.substring(start, this.pos));
         }
         const str = this.input.substring(start, this.pos);
         const num = parseFloat(str);
-        return new NumberExpr(num);
+        const range = this.getRangeFrom(new SourceLocation(start));
+        return new NumberExpr(range, num);
     }
 
     public parseString(): StringExpr {
+        const start = this.pos;
         if (!((this.pos < this.len) && (this.input[this.pos] === "\"")))
-            throw new ParseError(this.pos, "Expected \"");
+            throw new ParseError(this.getLocation(), "Expected \"");
         this.pos++;
         let value = "";
         while (true) {
             if (this.pos >= this.len)
-                throw new ParseError(this.pos, "Unexpected end of input");
+                throw new ParseError(this.getLocation(), "Unexpected end of input");
             if (this.input[this.pos] === "\\") {
                 this.pos++;
                 if (this.pos >= this.len)
-                    throw new ParseError(this.pos, "Unexpected end of input");
+                    throw new ParseError(this.getLocation(), "Unexpected end of input");
                 value += this.input[this.pos];
             }
             else if (this.input[this.pos] === "\"") {
                 this.pos++;
-                return new StringExpr(value);
+                const range = this.getRangeFrom(new SourceLocation(start));
+                return new StringExpr(range, value);
             }
             else {
                 value += this.input[this.pos];
@@ -136,26 +151,29 @@ export class Parser {
         while ((this.pos < this.len) && isSymbolChar(this.input[this.pos]))
             this.pos++;
         const name = this.input.substring(start, this.pos);
-        return new SymbolExpr(name);
+        const range = this.getRangeFrom(new SourceLocation(start));
+        return new SymbolExpr(range, name);
     }
 
     public parseQuote(): QuoteExpr {
+        const start = this.pos;
         if (!((this.pos < this.len) && (this.input[this.pos] === "'")))
-            throw new ParseError(this.pos, "Expected '");
+            throw new ParseError(this.getLocation(), "Expected '");
         this.pos++;
         const body = this.parseExpression();
-        return new QuoteExpr(body);
+        const range = this.getRangeFrom(new SourceLocation(start));
+        return new QuoteExpr(range, body);
     }
 
     public parseList(): PairExpr | NilExpr {
         const items: SExpr[] = [];
         if (!((this.pos < this.len) && (this.input[this.pos] === "(")))
-            throw new ParseError(this.pos, "Expected (");
+            throw new ParseError(this.getLocation(), "Expected (");
         this.pos++;
         this.skipWhitespace();
         while (true) {
             if (this.pos >= this.len)
-                throw new ParseError(this.pos, "Unexpected end of input");
+                throw new ParseError(this.getLocation(), "Unexpected end of input");
             if (this.input[this.pos] === ")") {
                 this.pos++;
                 break;
@@ -164,9 +182,12 @@ export class Parser {
             this.skipWhitespace();
         }
 
-        let result: PairExpr | NilExpr = new NilExpr();
-        for (let i = items.length - 1; i >= 0; i--)
-            result = new PairExpr(items[i], result);
+        const endRange = this.getRangeFrom(new SourceLocation(this.pos - 1));
+        let result: PairExpr | NilExpr = new NilExpr(endRange);
+        for (let i = items.length - 1; i >= 0; i--) {
+            const itemRange = new SourceRange(items[i].range.start.clone(), endRange.end.clone());
+            result = new PairExpr(itemRange, items[i], result);
+        }
         return result;
     }
 
@@ -182,6 +203,16 @@ export class Parser {
         else if (this.input[this.pos] === "(")
             return this.parseList();
         else
-            throw new ParseError(this.pos, "Unexpected character: " + this.input[this.pos]);
+            throw new ParseError(this.getLocation(), "Unexpected character: " + this.input[this.pos]);
+    }
+
+    public parseTopLevel(): SExpr[] {
+        const items: SExpr[] = [];
+        this.skipWhitespace();
+        while (this.pos < this.len) {
+            items.push(this.parseExpression());
+            this.skipWhitespace();
+        }
+        return items;
     }
 }

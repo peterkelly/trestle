@@ -52,7 +52,11 @@ export class DefineNode extends ASTNode {
 
 export class IfNode extends ASTNode {
     public _class_IfNode: any;
-    public constructor() {
+    public constructor(
+        public condition: ASTNode,
+        public consequent: ASTNode,
+        public alternative: ASTNode | null
+    ) {
         super();
     }
 }
@@ -80,7 +84,21 @@ export class CondNode extends ASTNode {
 
 export class ApplyNode extends ASTNode {
     public _class_ApplyNode: any;
-    public constructor() {
+    public proc: ASTNode;
+    public args: ASTNode[];
+
+    public constructor(proc: ASTNode, args: ASTNode[]) {
         super();
+        this.proc = proc;
+        this.args = args;
+    }
+}
+
+export class VariableNode extends ASTNode {
+    public _class_VariableNode: any;
+    public name: string;
+    public constructor(name: string) {
+        super();
+        this.name = name;
     }
 }
