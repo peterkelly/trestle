@@ -12,45 +12,69 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-export class SExpr {
+export abstract class SExpr {
     public _class_SExpr: any;
+
     public constructor() {
     }
+
+    public abstract dump(indent: string): void;
 }
 
 export class NumberExpr extends SExpr {
     public _class_NumberExpr: any;
     public value: number;
+
     public constructor(value: number) {
         super();
         this.value = value;
+    }
+
+    public dump(indent: string): void {
+        console.log(indent + "NUMBER " + this.value);
     }
 }
 
 export class StringExpr extends SExpr {
     public _class_StringExpr: any;
     public value: string;
+
     public constructor(value: string) {
         super();
         this.value = value;
+    }
+
+    public dump(indent: string): void {
+        console.log(indent + "STRING " + JSON.stringify(this.value));
     }
 }
 
 export class SymbolExpr extends SExpr {
     public _class_SymbolExpr: any;
     public name: string;
+
     public constructor(name: string) {
         super();
         this.name = name;
+    }
+
+    public dump(indent: string): void {
+        console.log(indent + "SYMBOL " + this.name);
     }
 }
 
 export class QuoteExpr extends SExpr {
     public _class_QuoteExpr: any;
     public body: SExpr;
+
     public constructor(body: SExpr) {
         super();
         this.body = body;
+    }
+
+    public dump(indent: string): void {
+        console.log(indent + "QUOTE");
+        this.body.dump(indent + "    ");
     }
 }
 
@@ -58,16 +82,28 @@ export class PairExpr extends SExpr {
     public _class_PairExpr: any;
     public car: SExpr;
     public cdr: SExpr;
+
     public constructor(car: SExpr, cdr: SExpr) {
         super();
         this.car = car;
         this.cdr = cdr;
     }
+
+    public dump(indent: string): void {
+        console.log(indent + "PAIR");
+        this.car.dump(indent + "    ");
+        this.cdr.dump(indent + "    ");
+    }
 }
 
 export class NilExpr extends SExpr {
     public _class_NilExpr: any;
+
     public constructor() {
         super();
+    }
+
+    public dump(indent: string): void {
+        console.log(indent + "NIL");
     }
 }
