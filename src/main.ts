@@ -39,9 +39,10 @@ function main(): void {
     try {
         const items = p.parseTopLevel();
         for (const item of items) {
-            item.dump("");
+            // item.dump("");
             const built = item.build();
-            console.log("" + built);
+            // console.log("" + built);
+            built.dump("");
         }
     }
     catch (e) {

@@ -14,10 +14,13 @@
 
 import { SExpr } from "./sexpr";
 
-export class ASTNode {
+export abstract class ASTNode {
     public _class_ASTNode: any;
+
     public constructor() {
     }
+
+    public abstract dump(indent: string): void;
 }
 
 export class ConstantNode extends ASTNode {
@@ -27,31 +30,48 @@ export class ConstantNode extends ASTNode {
         super();
         this.value = value;
     }
-}
 
-export class QuoteNode extends ASTNode {
-    public _class_QuoteNode: any;
-    public constructor() {
-        super();
+    public dump(indent: string): void {
+        console.log(indent + "Constant");
+        this.value.dump(indent + "    ");
     }
 }
 
-export class AssignNode extends ASTNode {
-    public _class_AssignNode: any;
-    public constructor() {
-        super();
-    }
-}
+// export class QuoteNode extends ASTNode {
+//     public _class_QuoteNode: any;
+
+//     public constructor() {
+//         super();
+//     }
+// }
+
+// export class AssignNode extends ASTNode {
+//     public _class_AssignNode: any;
+//     public constructor() {
+//         super();
+//     }
+// }
 
 export class DefineNode extends ASTNode {
     public _class_DefineNode: any;
-    public constructor() {
+    public name: string;
+    public body: ASTNode;
+
+    public constructor(name: string, body: ASTNode) {
         super();
+        this.name = name;
+        this.body = body;
+    }
+
+    public dump(indent: string): void {
+        console.log(indent + "Define " + this.name);
+        this.body.dump(indent + "    ");
     }
 }
 
 export class IfNode extends ASTNode {
     public _class_IfNode: any;
+
     public constructor(
         public condition: ASTNode,
         public consequent: ASTNode,
@@ -59,28 +79,46 @@ export class IfNode extends ASTNode {
     ) {
         super();
     }
+
+    public dump(indent: string): void {
+        console.log(indent + "If");
+        this.condition.dump(indent + "    ");
+        this.consequent.dump(indent + "    ");
+        if (this.alternative)
+            this.alternative.dump(indent + "    ");
+    }
 }
 
 export class LambdaNode extends ASTNode {
     public _class_LambdaNode: any;
-    public constructor() {
+    public variables: string[];
+    public body: ASTNode;
+
+    public constructor(variables: string[], body: ASTNode) {
         super();
+        this.variables = variables;
+        this.body = body;
+    }
+
+    public dump(indent: string): void {
+        console.log(indent + "Lambda" + this.variables.map(v => " " + v).join(" "));
+        this.body.dump(indent + "    ");
     }
 }
 
-export class BeginNode extends ASTNode {
-    public _class_BeginNode: any;
-    public constructor() {
-        super();
-    }
-}
+// export class BeginNode extends ASTNode {
+//     public _class_BeginNode: any;
+//     public constructor() {
+//         super();
+//     }
+// }
 
-export class CondNode extends ASTNode {
-    public _class_CondNode: any;
-    public constructor() {
-        super();
-    }
-}
+// export class CondNode extends ASTNode {
+//     public _class_CondNode: any;
+//     public constructor() {
+//         super();
+//     }
+// }
 
 export class ApplyNode extends ASTNode {
     public _class_ApplyNode: any;
@@ -92,13 +130,27 @@ export class ApplyNode extends ASTNode {
         this.proc = proc;
         this.args = args;
     }
+
+    public dump(indent: string): void {
+        console.log(indent + "Apply");
+        this.proc.dump(indent + "    ");
+        for (let i = 0; i < this.args.length; i++) {
+            console.log(indent + "    arg " + i);
+            this.args[i].dump(indent + "        ");
+        }
+    }
 }
 
 export class VariableNode extends ASTNode {
     public _class_VariableNode: any;
     public name: string;
+
     public constructor(name: string) {
         super();
         this.name = name;
+    }
+
+    public dump(indent: string): void {
+        console.log(indent + "Variable " + this.name);
     }
 }

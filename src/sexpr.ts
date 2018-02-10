@@ -17,6 +17,9 @@ import {
     ConstantNode,
     VariableNode,
     IfNode,
+    DefineNode,
+    LambdaNode,
+    ApplyNode,
 } from "./ast";
 import {
     SourceRange,
@@ -156,7 +159,7 @@ export class PairExpr extends SExpr {
             switch (first.name) {
                 case "if": {
                     if ((items.length !== 3) && (items.length !== 4)) {
-                        throw new BuildError(this.range, "if requires two or three arguments");
+                        throw new BuildError(first.range, "if requires two or three arguments");
                     }
                     const condition = items[1].build();
                     const consequent = items[2].build();
@@ -166,16 +169,56 @@ export class PairExpr extends SExpr {
                 }
                 case "quote": {
                     if (items.length !== 2)
-                        throw new Error("quote requires exactly one argument");
+                        throw new BuildError(first.range, "quote requires exactly one argument");
                     return new ConstantNode(items[2]);
                 }
+                case "define": {
+                    if (items.length !== 3)
+                        throw new Error("define requires exactly two arguments");
+                    const formals = items[1];
+                    const body = items[2].build();
+                    if (formals instanceof SymbolExpr) {
+                        return new DefineNode(formals.name, body);
+                    } else {
+                        const allNames = getFormalParameterNames(formals);
+                        if (allNames.length === 0)
+                            throw new BuildError(first.range, "define is missing name");
+                        const defName = allNames[0];
+                        const paramNames = allNames.slice(1);
+                        const lambda = new LambdaNode(paramNames, body);
+                        return new DefineNode(defName, lambda);
+                    }
+                }
+                case "lambda": {
+                    if (items.length !== 3)
+                        throw new BuildError(first.range, "lambda requires exactly two arguments");
+                    const names = getFormalParameterNames(items[1]);
+                    const body = items[2].build();
+                    return new LambdaNode(names, body);
+                }
                 default: {
-                    throw new BuildError(first.range, "Unknown special form: " + first.name);
                 }
             }
+            const proc = first.build();
+            const args = items.slice(1).map(a => a.build());
+            return new ApplyNode(proc, args);
         }
         throw new BuildError(this.range, "Unknown special form");
     }
+}
+
+function getFormalParameterNames(start: SExpr): string[] {
+    const result: string[] = [];
+    let item = start;
+    while (item instanceof PairExpr) {
+        if (!(item.car instanceof SymbolExpr))
+            throw new BuildError(item.car.range, "Formal parameter must be a symbol");
+        result.push(item.car.name);
+        item = item.cdr;
+    }
+    if (!(item instanceof NilExpr))
+        throw new BuildError(start.range, "Formal parameters must be a list of symbols");
+    return result;
 }
 
 export class NilExpr extends SExpr {
