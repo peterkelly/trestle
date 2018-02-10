@@ -184,13 +184,12 @@ export class Parser {
         }
 
         const endRange = this.getRangeFrom(new SourceLocation(this.pos - 1));
-        let result: PairExpr | NilExpr = new NilExpr(endRange);
-        for (let i = items.length - 1; i >= 0; i--) {
-            const itemStart = (i === 0) ? listStart : items[i].range.start;
-            const itemRange = new SourceRange(itemStart.clone(), endRange.end.clone());
-            result = new PairExpr(itemRange, items[i], result);
-        }
-        return result;
+        const terminator = new NilExpr(endRange);
+
+        const listEnd = new SourceLocation(this.pos);
+        const listRange = new SourceRange(listStart, listEnd);
+        return sexprArrayToList(items, listRange, terminator);
+
     }
 
     public parseExpression(): SExpr {
@@ -208,13 +207,33 @@ export class Parser {
             throw new ParseError(this.getLocation(), "Unexpected character: " + this.input[this.pos]);
     }
 
-    public parseTopLevel(): SExpr[] {
+    public parseTopLevel(): PairExpr | NilExpr {
         const items: SExpr[] = [];
         this.skipWhitespace();
         while (this.pos < this.len) {
             items.push(this.parseExpression());
             this.skipWhitespace();
         }
-        return items;
+
+        const listStart = new SourceLocation(0);
+        const listEnd = new SourceLocation(this.pos);
+        const endRange = new SourceRange(listStart.clone(), listEnd.clone());
+        const terminator = new NilExpr(endRange);
+        const listRange = new SourceRange(listStart, listEnd);
+        return sexprArrayToList(items, listRange, terminator);
+
+        // return items;
     }
+}
+
+function sexprArrayToList(items: SExpr[], listRange: SourceRange, terminator: NilExpr): PairExpr | NilExpr {
+    const listStart = listRange.start;
+    const listEnd = listRange.end;
+    let result: PairExpr | NilExpr = terminator;
+    for (let i = items.length - 1; i >= 0; i--) {
+        const itemStart = (i === 0) ? listStart : items[i].range.start;
+        const itemRange = new SourceRange(itemStart.clone(), listEnd.clone());
+        result = new PairExpr(itemRange, items[i], result);
+    }
+    return result;
 }

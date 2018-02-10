@@ -14,7 +14,7 @@
 
 import * as fs from "fs";
 import { Parser } from "./parse";
-import { SExpr, BuildError } from "./sexpr";
+import { NilExpr, BuildError, buildSequenceFromList } from "./sexpr";
 import { SourceCoords, SourceInput, testSourceCoords } from "./source";
 import { LexicalScope } from "./scope";
 
@@ -51,11 +51,10 @@ function main(): void {
         toplevelScope.addOwnSlot(">");
         toplevelScope.addOwnSlot(">=");
         // toplevelScope.addOwnSlot("fac");
-        const items = p.parseTopLevel();
-        for (const item of items) {
-            item.dump("");
-            const built = item.build(toplevelScope);
-            // console.log("" + built);
+        const itemList = p.parseTopLevel();
+        if (!(itemList instanceof NilExpr)) {
+            itemList.dump("");
+            const built = buildSequenceFromList(toplevelScope, itemList);
             built.dump("");
         }
     }

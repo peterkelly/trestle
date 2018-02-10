@@ -321,7 +321,7 @@ function buildLetrecDefs(inner: LexicalScope, defsList: SExpr): LetrecBinding[] 
     // return result;
 }
 
-function buildSequenceFromList(scope: LexicalScope, list: PairExpr): ASTNode {
+export function buildSequenceFromList(scope: LexicalScope, list: PairExpr): ASTNode {
     const first = list.car.build(scope);
     if (list.cdr instanceof NilExpr) {
         return first;
