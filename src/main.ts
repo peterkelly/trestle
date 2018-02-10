@@ -50,10 +50,10 @@ function main(): void {
         toplevelScope.addOwnSlot("<=");
         toplevelScope.addOwnSlot(">");
         toplevelScope.addOwnSlot(">=");
-        toplevelScope.addOwnSlot("fac");
+        // toplevelScope.addOwnSlot("fac");
         const items = p.parseTopLevel();
         for (const item of items) {
-            // item.dump("");
+            item.dump("");
             const built = item.build(toplevelScope);
             // console.log("" + built);
             built.dump("");
@@ -68,6 +68,7 @@ function main(): void {
                 "(" + endCoords.line + "," + endCoords.col + "): " + e.detail);
             const hltext = sinput.highlightRange(e.range);
             console.log(hltext);
+            console.log(e.stack);
         }
         else {
             throw e;

@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import { SExpr } from "./sexpr";
-import { LexicalRef } from "./scope";
+import { LexicalRef, LexicalScope } from "./scope";
 
 export abstract class ASTNode {
     public _class_ASTNode: any;
@@ -177,5 +177,32 @@ export class VariableNode extends ASTNode {
 
     public dump(indent: string): void {
         console.log(indent + "Variable " + this.ref.target.name + " (" + this.ref.depth + "," + this.ref.index + ")");
+    }
+}
+
+export interface LetrecBinding {
+    ref: LexicalRef;
+    body: ASTNode;
+}
+
+export class LetrecNode extends ASTNode {
+    public _class_LetrecNode: any;
+    public scope: LexicalScope;
+    public bindings: LetrecBinding[];
+    public body: ASTNode;
+
+    public constructor(scope: LexicalScope, bindings: LetrecBinding[], body: ASTNode) {
+        super();
+        this.scope = scope;
+        this.bindings = bindings;
+        this.body = body;
+    }
+
+    public dump(indent: string): void {
+        console.log(indent + "Letrec");
+        for (const binding of this.bindings) {
+            console.log(indent + "    Binding " + binding.ref.target.name);
+            binding.body.dump(indent + "        ");
+        }
     }
 }

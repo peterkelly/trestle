@@ -17,16 +17,19 @@ import {
     ConstantNode,
     VariableNode,
     IfNode,
-    DefineNode,
+    // DefineNode,
     LambdaNode,
     ApplyNode,
     AssignNode,
     SequenceNode,
+    LetrecBinding,
+    LetrecNode,
 } from "./ast";
 import {
     SourceRange,
 } from "./source";
 import {
+    LexicalRef,
     LexicalScope,
 } from "./scope";
 
@@ -180,24 +183,24 @@ export class PairExpr extends SExpr {
                         throw new BuildError(first.range, "quote requires exactly one argument");
                     return new ConstantNode(items[2]);
                 }
-                case "define": {
-                    if (items.length !== 3)
-                        throw new Error("define requires exactly two arguments");
-                    const formals = items[1];
-                    if (formals instanceof SymbolExpr) {
-                        const innerScope = makeInnerScope(scope, [formals]);
-                        const body = items[2].build(innerScope);
-                        return new DefineNode(formals.name, body);
-                    } else {
-                        const allNames = getFormalParameterNames(formals);
-                        if (allNames.length === 0)
-                            throw new BuildError(first.range, "define is missing name");
-                        const defName = allNames[0];
-                        const paramNames = allNames.slice(1);
-                        const lambda = buildLambda(scope, paramNames, items[2]);
-                        return new DefineNode(defName.name, lambda);
-                    }
-                }
+                // case "define": {
+                //     if (items.length !== 3)
+                //         throw new Error("define requires exactly two arguments");
+                //     const formals = items[1];
+                //     if (formals instanceof SymbolExpr) {
+                //         const innerScope = makeInnerScope(scope, [formals]);
+                //         const body = items[2].build(innerScope);
+                //         return new DefineNode(formals.name, body);
+                //     } else {
+                //         const allNames = getFormalParameterNames(formals);
+                //         if (allNames.length === 0)
+                //             throw new BuildError(first.range, "define is missing name");
+                //         const defName = allNames[0];
+                //         const paramNames = allNames.slice(1);
+                //         const lambda = buildLambda(scope, paramNames, items[2]);
+                //         return new DefineNode(defName.name, lambda);
+                //     }
+                // }
                 case "lambda": {
                     if (items.length !== 3)
                         throw new BuildError(first.range, "lambda requires exactly two arguments");
@@ -220,15 +223,21 @@ export class PairExpr extends SExpr {
                     return new AssignNode(ref, body);
                 }
                 case "begin": {
-                    if (items.length < 2)
+                    if (!(this.cdr instanceof PairExpr))
                         throw new BuildError(first.range, "begin requires at least one argument");
-                    const bodies: ASTNode[] = [];
-                    for (let i = 1; i < items.length; i++)
-                        bodies.push(items[i].build(scope));
-                    let result: ASTNode = bodies[bodies.length - 1];
-                    for (let i = bodies.length - 2; i >= 0; i--)
-                        result = new SequenceNode(bodies[i], result);
-                    return result;
+                    return buildSequenceFromList(scope, this.cdr);
+                }
+                case "letrec": {
+                    const varsPtr = this.cdr;
+                    if (!(varsPtr instanceof PairExpr))
+                        throw new BuildError(first.range, "letrec requires at least two arguments");
+                    const bodyPtr = varsPtr.cdr;
+                    if (!(bodyPtr instanceof PairExpr))
+                        throw new BuildError(first.range, "letrec requires at least two arguments");
+                    const inner = new LexicalScope(scope);
+                    const bindings = buildLetrecDefs(inner, varsPtr.car);
+                    const body = buildSequenceFromList(inner, bodyPtr);
+                    return new LetrecNode(inner, bindings, body);
                 }
                 default:
                     break;
@@ -238,6 +247,91 @@ export class PairExpr extends SExpr {
             return new ApplyNode(proc, args);
         }
         throw new BuildError(this.range, "Unknown special form");
+    }
+}
+
+function listToArray(list: SExpr): SExpr[] | null {
+    const result: SExpr[] = [];
+    let item = list;
+    while (item instanceof PairExpr) {
+        result.push(item.car);
+        item = item.cdr;
+    }
+    if (!(item instanceof NilExpr))
+        return null;
+        // throw new BuildError(list.range, "listToArray: Expected a list");
+    return result;
+}
+
+function buildLetrecDefs(inner: LexicalScope, defsList: SExpr): LetrecBinding[] {
+    const result: LetrecBinding[] = [];
+
+    const defsArray = listToArray(defsList);
+    if (defsArray === null)
+        throw new BuildError(defsList.range, "letrec: definitions must be a list");
+    const prepared: { ref: LexicalRef, body: SExpr }[] = [];
+    for (const def of defsArray) {
+        const defParts = listToArray(def);
+        if (defParts === null)
+            throw new BuildError(def.range, "letrec: definition must be a list");
+        if (defParts.length !== 2)
+            throw new BuildError(def.range, "letrec: definition must be a list of two items");
+
+
+        // if (!(def instanceof PairExpr))
+        //     throw new BuildError(def.range, "letrec definition must be a pair");
+        const nameExpr = defParts[0];
+        const bodyExpr = defParts[1];
+        if (!(nameExpr instanceof SymbolExpr))
+            throw new BuildError(nameExpr.range, "name must by a symbol");
+        const name = nameExpr.name;
+        if (inner.hasOwnSlot(name))
+            throw new BuildError(nameExpr.range, "duplicate variable definition: " + name);
+        const ref = inner.addOwnSlot(name);
+        prepared.push({
+            ref: ref,
+            body: bodyExpr
+        });
+    }
+
+    for (const def of prepared) {
+        const ref = def.ref;
+        const body = def.body.build(inner);
+        result.push({ ref, body });
+    }
+    return result;
+
+
+    // const item = defsList;
+    // while (item instanceof PairExpr) {
+    //     const varDef = item.car;
+    //     if (!(varDef instanceof PairExpr))
+    //         throw new BuildError(varDef.range, "Letrec binding must be a pair");
+
+    //     const nameExpr = varDef.car;
+    //     const bodyExpr = varDef.cdr;
+
+    //     if (!(nameExpr instanceof SymbolExpr))
+    //         throw new BuildError(nameExpr.range, "name must be a symbol");
+
+    //     item = item.cdr;
+    // }
+    // if (!(item instanceof NilExpr))
+    //     throw new BuildError(item.range, "Expected a list");
+    // return result;
+}
+
+function buildSequenceFromList(scope: LexicalScope, list: PairExpr): ASTNode {
+    const first = list.car.build(scope);
+    if (list.cdr instanceof NilExpr) {
+        return first;
+    }
+    else if (list.cdr instanceof PairExpr) {
+        const rest = buildSequenceFromList(scope, list.cdr);
+        return new SequenceNode(first, rest);
+    }
+    else {
+        throw new BuildError(list.cdr.range, "Expected a list");
     }
 }
 

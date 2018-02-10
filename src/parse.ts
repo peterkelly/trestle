@@ -166,6 +166,7 @@ export class Parser {
     }
 
     public parseList(): PairExpr | NilExpr {
+        const listStart = new SourceLocation(this.pos);
         const items: SExpr[] = [];
         if (!((this.pos < this.len) && (this.input[this.pos] === "(")))
             throw new ParseError(this.getLocation(), "Expected (");
@@ -185,7 +186,8 @@ export class Parser {
         const endRange = this.getRangeFrom(new SourceLocation(this.pos - 1));
         let result: PairExpr | NilExpr = new NilExpr(endRange);
         for (let i = items.length - 1; i >= 0; i--) {
-            const itemRange = new SourceRange(items[i].range.start.clone(), endRange.end.clone());
+            const itemStart = (i === 0) ? listStart : items[i].range.start;
+            const itemRange = new SourceRange(itemStart.clone(), endRange.end.clone());
             result = new PairExpr(itemRange, items[i], result);
         }
         return result;
