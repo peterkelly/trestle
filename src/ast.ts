@@ -14,7 +14,7 @@
 
 import { SExpr } from "./sexpr";
 import { LexicalRef, LexicalScope } from "./scope";
-import { Value, StringValue, PairValue, NilValue } from "./value";
+import { Value, StringValue, PairValue, NilValue, BooleanValue } from "./value";
 import { Environment, Continuation, BuiltinProcedureValue } from "./runtime";
 
 export abstract class ASTNode {
@@ -162,6 +162,21 @@ export class IfNode extends ASTNode {
         this.consequent.dump(indent + "    ");
         if (this.alternative)
             this.alternative.dump(indent + "    ");
+    }
+
+    public evaluate(env: Environment, succeed: Continuation, fail: Continuation): void {
+        this.condition.evaluate(env,
+            // success continuation
+            (value: Value): void => {
+                if (!(value instanceof BooleanValue) || (value.data !== false))
+                    this.consequent.evaluate(env, succeed, fail);
+                else if (this.alternative !== null)
+                    this.alternative.evaluate(env, succeed, fail);
+                else
+                    succeed(new BooleanValue(true));
+            },
+            // failure continuation
+            fail);
     }
 }
 
@@ -439,19 +454,22 @@ export class LetrecNode extends ASTNode {
 
     public evaluate(env: Environment, succeed: Continuation, fail: Continuation): void {
         // fail(new StringValue("letrec evaluate not implemented"));
-        this.evalBinding(0, NilValue.instance, env, succeed, fail);
+        console.log("letrec evaluate");
+        const innerEnv = new Environment(this.innerScope, env);
+        this.evalBinding(0, NilValue.instance, innerEnv, succeed, fail);
     }
 
-    public evalBinding(bindingIndex: number, prev: Value, env: Environment, succeed: Continuation, fail: Continuation): void {
+    public evalBinding(bindingIndex: number, prev: Value, innerEnv: Environment, succeed: Continuation, fail: Continuation): void {
         if (bindingIndex >= this.bindings.length) {
-            this.evalBody(prev, env, succeed, fail);
+            this.evalBody(prev, innerEnv, succeed, fail);
         }
         else {
-            this.bindings[bindingIndex].body.evaluate(env,
+            console.log("letrec evalBinding " + bindingIndex);
+            this.bindings[bindingIndex].body.evaluate(innerEnv,
                 // success continuation
                 (value: Value): void => {
                     const lst = new PairValue(value, prev);
-                    this.evalBinding(bindingIndex + 1, lst, env, succeed, fail);
+                    this.evalBinding(bindingIndex + 1, lst, innerEnv, succeed, fail);
                 },
                 // failure continuation
                 (error: Value): void => {
@@ -460,7 +478,7 @@ export class LetrecNode extends ASTNode {
         }
     }
 
-    public evalBody(bindingList: Value, env: Environment, succeed: Continuation, fail: Continuation): void {
+    public evalBody(bindingList: Value, innerEnv: Environment, succeed: Continuation, fail: Continuation): void {
         const id = evalLetrecCount++;
         const bindingArray: Value[] = [];
         while ((bindingList instanceof PairValue)) {
@@ -470,9 +488,9 @@ export class LetrecNode extends ASTNode {
         if (!(bindingList instanceof NilValue))
             throw new Error("bindingList should be nil");
         bindingArray.reverse();
+        console.log("letrec evalBody " + id + ": bindingArray.length = " + bindingArray.length);
 
 
-        const innerEnv = new Environment(this.innerScope, env);
         for (let i = 0; i < bindingArray.length; i++) {
             if (i >= this.bindings.length) { // sanity check
                 throw new Error("Invalid argument number: more than # bindings");
@@ -485,6 +503,7 @@ export class LetrecNode extends ASTNode {
             variable.value = bindingArray[i];
         }
 
+        console.log("letrec evalBody " + id + ": starting evaluation of body");
         this.body.evaluate(innerEnv,
             // success continuation
             (value: Value): void => {

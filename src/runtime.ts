@@ -44,8 +44,13 @@ export class Environment {
             this.variables.push(new Variable(scope.slots[i], NilValue.instance));
 
         if ((outer !== null) && (scope.outer !== null)) {
-            if (outer.scope !== scope.outer)
-                throw new Error("Environment: mismatch in outer environment/scope");
+            if (outer.scope !== scope.outer) {
+                const runtimeNames = outer.scope.slots.map(s => s.name);
+                const staticNames = scope.outer.slots.map(s => s.name);
+                throw new Error("Environment: mismatch in outer environment/scope;" +
+                    " outer.scope " + JSON.stringify(runtimeNames) +
+                    ", scope.outer " + JSON.stringify(staticNames));
+            }
         }
         else if ((outer === null) && (scope.outer !== null)) {
             throw new Error("Environment: scope has outer but environment doesn't");
@@ -60,7 +65,7 @@ export class Environment {
             throw new Error("getVar " + name + ": invalid index");
         const variable = this.variables[index];
         if (variable.slot.name !== name)
-            throw new Error("getVar " + name + ": name mismatch");
+            throw new Error("getVar " + name + ": name mismatch: expected " + name + ", actual " + variable.slot.name);
         if (variable.slot !== slot)
             throw new Error("getVar " + name + ": slot mismatch");
         return variable;
