@@ -273,11 +273,11 @@ export class PairExpr extends SExpr {
                 default:
                     break;
             }
-            const proc = first.build(scope);
-            const args = items.slice(1).map(a => a.build(scope));
-            return new ApplyNode(proc, args);
         }
-        throw new BuildError(this.range, "Unknown special form");
+        const proc = first.build(scope);
+        const args = items.slice(1).map(a => a.build(scope));
+        return new ApplyNode(proc, args);
+        // throw new BuildError(this.range, "Unknown special form");
     }
 }
 
@@ -349,7 +349,7 @@ export function buildSequenceFromList(scope: LexicalScope, list: PairExpr): ASTN
 
 function buildLambda(scope: LexicalScope, names: SymbolExpr[], body: SExpr): LambdaNode {
     const innerScope = makeInnerScope(scope, names);
-    return new LambdaNode(names.map(e => e.name), body.build(innerScope));
+    return new LambdaNode(names.map(e => e.name), innerScope, body.build(innerScope));
 }
 
 function makeInnerScope(outer: LexicalScope, symbols: SymbolExpr[]): LexicalScope {

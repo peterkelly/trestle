@@ -172,8 +172,8 @@ function num_mod(args: number[]): number {
 
 function wrapNumeric(fun: NumericBuiltin): BuiltinProcedure {
     return (args: Value[], succeed: Continuation, fail: Continuation) => {
-        const numargs = toNumbers(args);
         try {
+            const numargs = toNumbers(args);
             const result = fun(numargs);
             succeed(new NumberValue(result));
         }

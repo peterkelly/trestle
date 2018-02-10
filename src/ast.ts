@@ -165,20 +165,42 @@ export class IfNode extends ASTNode {
     }
 }
 
+export class LambdaProcedureValue extends Value {
+    public _class_LambdaProcedureValue: any;
+    public readonly env: Environment;
+    public readonly proc: LambdaNode;
+
+    public constructor(env: Environment, proc: LambdaNode) {
+        super();
+        this.env = env;
+        this.proc = proc;
+    }
+
+    public print(output: string[], visiting: Set<Value>): void {
+        output.push("<lambda ("  + this.proc.variables.join(" ") + ")>");
+    }
+}
+
 export class LambdaNode extends ASTNode {
     public _class_LambdaNode: any;
-    public variables: string[];
-    public body: ASTNode;
+    public readonly variables: string[];
+    public readonly innerScope: LexicalScope;
+    public readonly body: ASTNode;
 
-    public constructor(variables: string[], body: ASTNode) {
+    public constructor(variables: string[], innerScope: LexicalScope, body: ASTNode) {
         super();
         this.variables = variables;
+        this.innerScope = innerScope;
         this.body = body;
     }
 
     public dump(indent: string): void {
-        console.log(indent + "Lambda" + this.variables.map(v => " " + v).join(" "));
+        console.log(indent + "Lambda" + this.variables.map(v => " " + v).join(""));
         this.body.dump(indent + "    ");
+    }
+
+    public evaluate(env: Environment, succeed: Continuation, fail: Continuation): void {
+        succeed(new LambdaProcedureValue(env, this));
     }
 }
 
@@ -282,29 +304,76 @@ export class ApplyNode extends ASTNode {
             throw new Error("arglist should be nil");
         argArray.reverse();
 
-        if (!(procValue instanceof BuiltinProcedureValue)) {
-            fail(new StringValue("Cannot apply " + procValue));
-            return;
-        }
+        // if (!(procValue instanceof BuiltinProcedureValue)) {
+        //     fail(new StringValue("Cannot apply " + procValue));
+        //     return;
+        // }
 
         console.log("evaluateProc " + id + ": proc = " + procValue);
         for (let i = 0; i < argArray.length; i++) {
             console.log("evaluateProc " + id + ": args[" + i + "] = " + argArray[i]);
         }
 
+        if (procValue instanceof BuiltinProcedureValue) {
+            procValue.proc(argArray,
+                // success continuation
+                (value: Value): void => {
+                    console.log("evaluateProc " + id + " (builtin): success; value = " + value);
+                    succeed(value);
+                },
+                // failure continuation
+                (error: Value): void => {
+                    console.log("evaluateProc " + id + " (builtin): failure; error = " + error);
+                    fail(error);
+                });
+        }
+        else if (procValue instanceof LambdaProcedureValue) {
+            const outerEnv = procValue.env;
+            const lambdaNode = procValue.proc;
+
+            const expectedArgCount = lambdaNode.variables.length;
+            const actualArgCount = argArray.length;
+            if (actualArgCount !== expectedArgCount) {
+                fail(new StringValue("Incorrect number of arguments; have " + actualArgCount + ", expecetd " +
+                    expectedArgCount));
+                return;
+            }
+
+
+            const innerEnv = new Environment(lambdaNode.innerScope, outerEnv);
+            for (let i = 0; i < argArray.length; i++) {
+                if (i >= lambdaNode.variables.length) { // sanity check
+                    throw new Error("Invalid argument number: more than # variables");
+                }
+                if (i >= lambdaNode.innerScope.slots.length) { // sanity check
+                    throw new Error("Invalid argument number: more than # slots");
+                }
+                const variable = innerEnv.getVar(i, lambdaNode.variables[i], lambdaNode.innerScope.slots[i]);
+                console.log("evaluateProc " + id + " (lambda): binding " + lambdaNode.variables[i] + " = " + argArray[i]);
+                variable.value = argArray[i];
+            }
+
+            // procValue.proc.body.evaluate(innerEnv, succeed, fail);
+
+            procValue.proc.body.evaluate(innerEnv,
+                // success continuation
+                (value: Value): void => {
+                    console.log("evaluateProc " + id + " (lambda): success; value = " + value);
+                    succeed(value);
+                },
+                // failure continuation
+                (error: Value): void => {
+                    console.log("evaluateProc " + id + " (lambda): failure; error = " + error);
+                    fail(error);
+                });
+        }
+        else {
+            fail(new StringValue("Cannot apply " + procValue));
+            return;
+        }
+
         // procValue.proc(argArray, succeed, fail);
 
-        procValue.proc(argArray,
-            // success continuation
-            (value: Value): void => {
-                console.log("evaluateProc " + id + ": success; value = " + value);
-                succeed(value);
-            },
-            // failure continuation
-            (error: Value): void => {
-                console.log("evaluateProc " + id + ": failure; error = " + error);
-                fail(error);
-            });
 
 
    }
@@ -364,5 +433,8 @@ export class LetrecNode extends ASTNode {
         }
         console.log(indent + "    Body");
         this.body.dump(indent + "        ");
+    }
+
+    public evaluate(env: Environment, succeed: Continuation, fail: Continuation): void {
     }
 }
