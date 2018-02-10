@@ -178,6 +178,64 @@ export class IfNode extends ASTNode {
     }
 }
 
+export class AndNode extends ASTNode {
+    public _class_OrNode: any;
+    public first: ASTNode;
+    public second: ASTNode;
+
+    public constructor(first: ASTNode, second: ASTNode) {
+        super();
+        this.first = first;
+        this.second = second;
+    }
+
+    public dump(indent: string): void {
+        console.log(indent + "And");
+        this.first.dump(indent + "    ");
+        this.second.dump(indent + "    ");
+    }
+
+    public evaluate(env: Environment, succeed: Continuation, fail: Continuation): void {
+        const succeed2: Continuation = (value: Value): void => {
+            if (!value.isTrue())
+                succeed(value);
+            else
+                this.second.evaluate(env, succeed, fail);
+        };
+
+        this.first.evaluate(env, succeed2, fail);
+    }
+}
+
+export class OrNode extends ASTNode {
+    public _class_OrNode: any;
+    public first: ASTNode;
+    public second: ASTNode;
+
+    public constructor(first: ASTNode, second: ASTNode) {
+        super();
+        this.first = first;
+        this.second = second;
+    }
+
+    public dump(indent: string): void {
+        console.log(indent + "Or");
+        this.first.dump(indent + "    ");
+        this.second.dump(indent + "    ");
+    }
+
+    public evaluate(env: Environment, succeed: Continuation, fail: Continuation): void {
+        const succeed2: Continuation = (value: Value): void => {
+            if (value.isTrue())
+                succeed(value);
+            else
+                this.second.evaluate(env, succeed, fail);
+        };
+
+        this.first.evaluate(env, succeed2, fail);
+    }
+}
+
 export class LambdaProcedureValue extends Value {
     public _class_LambdaProcedureValue: any;
     public readonly env: Environment;

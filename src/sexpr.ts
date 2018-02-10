@@ -17,6 +17,8 @@ import {
     ConstantNode,
     VariableNode,
     IfNode,
+    AndNode,
+    OrNode,
     // DefineNode,
     LambdaNode,
     ApplyNode,
@@ -301,6 +303,18 @@ export class PairExpr extends SExpr {
                     const body = buildSequenceFromList(inner, bodyPtr);
                     return new LetrecNode(inner, bindings, body);
                 }
+                case "and": {
+                    const argsPtr = this.cdr;
+                    if (!(argsPtr instanceof PairExpr))
+                        throw new BuildError(first.range, "and requires at least one argument");
+                    return makeAnd(scope, argsPtr);
+                }
+                case "or": {
+                    const argsPtr = this.cdr;
+                    if (!(argsPtr instanceof PairExpr))
+                        throw new BuildError(first.range, "or requires at least one argument");
+                    return makeOr(scope, argsPtr);
+                }
                 default:
                     break;
             }
@@ -309,6 +323,34 @@ export class PairExpr extends SExpr {
         const args = items.slice(1).map(a => a.build(scope));
         return new ApplyNode(proc, args);
         // throw new BuildError(this.range, "Unknown special form");
+    }
+}
+
+function makeAnd(scope: LexicalScope, list: PairExpr): ASTNode {
+    if (list.cdr instanceof PairExpr) {
+        const first = list.car.build(scope);
+        const second = makeAnd(scope, list.cdr);
+        return new AndNode(first, second);
+    }
+    else if (list.cdr instanceof NilExpr) {
+        return list.car.build(scope);
+    }
+    else {
+        throw new BuildError(list.cdr.range, "expected a list");
+    }
+}
+
+function makeOr(scope: LexicalScope, list: PairExpr): ASTNode {
+    if (list.cdr instanceof PairExpr) {
+        const first = list.car.build(scope);
+        const second = makeOr(scope, list.cdr);
+        return new OrNode(first, second);
+    }
+    else if (list.cdr instanceof NilExpr) {
+        return list.car.build(scope);
+    }
+    else {
+        throw new BuildError(list.cdr.range, "expected a list");
     }
 }
 
