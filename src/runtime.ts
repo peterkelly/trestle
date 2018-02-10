@@ -61,5 +61,4 @@ export class Environment {
             throw new Error(name + ": no such variable");
         entry.value = value;
     }
-
 }

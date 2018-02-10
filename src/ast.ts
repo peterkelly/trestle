@@ -13,6 +13,7 @@
 // limitations under the License.
 
 import { SExpr } from "./sexpr";
+import { LexicalRef } from "./scope";
 
 export abstract class ASTNode {
     public _class_ASTNode: any;
@@ -45,12 +46,21 @@ export class ConstantNode extends ASTNode {
 //     }
 // }
 
-// export class AssignNode extends ASTNode {
-//     public _class_AssignNode: any;
-//     public constructor() {
-//         super();
-//     }
-// }
+export class AssignNode extends ASTNode {
+    public _class_AssignNode: any;
+    public ref: LexicalRef;
+    public body: ASTNode;
+    public constructor(ref: LexicalRef, body: ASTNode) {
+        super();
+        this.ref = ref;
+        this.body = body;
+    }
+
+    public dump(indent: string): void {
+        console.log(indent + "Assign " + this.ref.target.name + " (" + this.ref.depth + "," + this.ref.index + ")");
+        this.body.dump(indent + "    ");
+    }
+}
 
 export class DefineNode extends ASTNode {
     public _class_DefineNode: any;
@@ -106,12 +116,27 @@ export class LambdaNode extends ASTNode {
     }
 }
 
-// export class BeginNode extends ASTNode {
-//     public _class_BeginNode: any;
-//     public constructor() {
-//         super();
-//     }
-// }
+export class SequenceNode extends ASTNode {
+    public _class_SequenceNode: any;
+    public body: ASTNode;
+    public next: ASTNode;
+
+    public constructor(body: ASTNode, next: ASTNode) {
+        super();
+        this.body = body;
+        this.next = next;
+    }
+
+    public dump(indent: string): void {
+        console.log(indent + "Sequence");
+        let cur: ASTNode = this;
+        while (cur instanceof SequenceNode) {
+            cur.body.dump(indent + "    ");
+            cur = cur.next;
+        }
+        cur.dump(indent + "    ");
+    }
+}
 
 // export class CondNode extends ASTNode {
 //     public _class_CondNode: any;
@@ -143,14 +168,14 @@ export class ApplyNode extends ASTNode {
 
 export class VariableNode extends ASTNode {
     public _class_VariableNode: any;
-    public name: string;
+    public ref: LexicalRef;
 
-    public constructor(name: string) {
+    public constructor(ref: LexicalRef) {
         super();
-        this.name = name;
+        this.ref = ref;
     }
 
     public dump(indent: string): void {
-        console.log(indent + "Variable " + this.name);
+        console.log(indent + "Variable " + this.ref.target.name + " (" + this.ref.depth + "," + this.ref.index + ")");
     }
 }

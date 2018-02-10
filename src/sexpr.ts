@@ -20,10 +20,15 @@ import {
     DefineNode,
     LambdaNode,
     ApplyNode,
+    AssignNode,
+    SequenceNode,
 } from "./ast";
 import {
     SourceRange,
 } from "./source";
+import {
+    LexicalScope,
+} from "./scope";
 
 export class BuildError extends Error {
     public readonly range: SourceRange;
@@ -45,7 +50,7 @@ export abstract class SExpr {
 
     public abstract dump(indent: string): void;
 
-    public abstract build(): ASTNode;
+    public abstract build(scope: LexicalScope): ASTNode;
 }
 
 export class NumberExpr extends SExpr {
@@ -61,7 +66,7 @@ export class NumberExpr extends SExpr {
         console.log(indent + "NUMBER " + this.value);
     }
 
-    public build(): ASTNode {
+    public build(scope: LexicalScope): ASTNode {
         return new ConstantNode(this);
     }
 }
@@ -79,7 +84,7 @@ export class StringExpr extends SExpr {
         console.log(indent + "STRING " + JSON.stringify(this.value));
     }
 
-    public build(): ASTNode {
+    public build(scope: LexicalScope): ASTNode {
         return new ConstantNode(this);
     }
 }
@@ -97,8 +102,11 @@ export class SymbolExpr extends SExpr {
         console.log(indent + "SYMBOL " + this.name);
     }
 
-    public build(): ASTNode {
-        return new VariableNode(this.name);
+    public build(scope: LexicalScope): ASTNode {
+        const ref = scope.lookup(this.name);
+        if (ref === null)
+            throw new BuildError(this.range, "symbol not found: " + this.name);
+        return new VariableNode(ref);
     }
 }
 
@@ -116,7 +124,7 @@ export class QuoteExpr extends SExpr {
         this.body.dump(indent + "    ");
     }
 
-    public build(): ASTNode {
+    public build(scope: LexicalScope): ASTNode {
         return new ConstantNode(this);
     }
 }
@@ -150,7 +158,7 @@ export class PairExpr extends SExpr {
         return items;
     }
 
-    public build(): ASTNode {
+    public build(scope: LexicalScope): ASTNode {
         const items = this.toArray();
         if (items.length === 0)
             throw new BuildError(this.range, "Empty list");
@@ -161,9 +169,9 @@ export class PairExpr extends SExpr {
                     if ((items.length !== 3) && (items.length !== 4)) {
                         throw new BuildError(first.range, "if requires two or three arguments");
                     }
-                    const condition = items[1].build();
-                    const consequent = items[2].build();
-                    const alternative = (items.length === 4) ? items[3].build() : null;
+                    const condition = items[1].build(scope);
+                    const consequent = items[2].build(scope);
+                    const alternative = (items.length === 4) ? items[3].build(scope) : null;
 
                     return new IfNode(condition, consequent, alternative);
                 }
@@ -176,8 +184,9 @@ export class PairExpr extends SExpr {
                     if (items.length !== 3)
                         throw new Error("define requires exactly two arguments");
                     const formals = items[1];
-                    const body = items[2].build();
                     if (formals instanceof SymbolExpr) {
+                        const innerScope = makeInnerScope(scope, [formals]);
+                        const body = items[2].build(innerScope);
                         return new DefineNode(formals.name, body);
                     } else {
                         const allNames = getFormalParameterNames(formals);
@@ -185,35 +194,75 @@ export class PairExpr extends SExpr {
                             throw new BuildError(first.range, "define is missing name");
                         const defName = allNames[0];
                         const paramNames = allNames.slice(1);
-                        const lambda = new LambdaNode(paramNames, body);
-                        return new DefineNode(defName, lambda);
+                        const lambda = buildLambda(scope, paramNames, items[2]);
+                        return new DefineNode(defName.name, lambda);
                     }
                 }
                 case "lambda": {
                     if (items.length !== 3)
                         throw new BuildError(first.range, "lambda requires exactly two arguments");
                     const names = getFormalParameterNames(items[1]);
-                    const body = items[2].build();
-                    return new LambdaNode(names, body);
+                    return buildLambda(scope, names, items[2]);
+                    // const innerScope = makeInnerScope(scope, names);
+                    // const body = items[2].build(innerScope);
+                    // return new LambdaNode(names, body);
                 }
-                default: {
+                case "set!": {
+                    if (items.length !== 3)
+                        throw new BuildError(first.range, "set! requires exactly two arguments");
+                    const name = items[1];
+                    const body = items[2].build(scope);
+                    if (!(name instanceof SymbolExpr))
+                        throw new BuildError(name.range, "name must be a symbol");
+                    const ref = scope.lookup(name.name);
+                    if (ref === null)
+                        throw new BuildError(name.range, "symbol not found: " + name.name);
+                    return new AssignNode(ref, body);
                 }
+                case "begin": {
+                    if (items.length < 2)
+                        throw new BuildError(first.range, "begin requires at least one argument");
+                    const bodies: ASTNode[] = [];
+                    for (let i = 1; i < items.length; i++)
+                        bodies.push(items[i].build(scope));
+                    let result: ASTNode = bodies[bodies.length - 1];
+                    for (let i = bodies.length - 2; i >= 0; i--)
+                        result = new SequenceNode(bodies[i], result);
+                    return result;
+                }
+                default:
+                    break;
             }
-            const proc = first.build();
-            const args = items.slice(1).map(a => a.build());
+            const proc = first.build(scope);
+            const args = items.slice(1).map(a => a.build(scope));
             return new ApplyNode(proc, args);
         }
         throw new BuildError(this.range, "Unknown special form");
     }
 }
 
-function getFormalParameterNames(start: SExpr): string[] {
-    const result: string[] = [];
+function buildLambda(scope: LexicalScope, names: SymbolExpr[], body: SExpr): LambdaNode {
+    const innerScope = makeInnerScope(scope, names);
+    return new LambdaNode(names.map(e => e.name), body.build(innerScope));
+}
+
+function makeInnerScope(outer: LexicalScope, symbols: SymbolExpr[]): LexicalScope {
+    const innerScope = new LexicalScope(outer);
+    for (const sym of symbols) {
+        if (innerScope.hasOwnSlot(sym.name))
+            throw new BuildError(sym.range, "Duplicate parameter name: " + sym.name);
+        innerScope.addOwnSlot(sym.name);
+    }
+    return innerScope;
+}
+
+function getFormalParameterNames(start: SExpr): SymbolExpr[] {
+    const result: SymbolExpr[] = [];
     let item = start;
     while (item instanceof PairExpr) {
         if (!(item.car instanceof SymbolExpr))
             throw new BuildError(item.car.range, "Formal parameter must be a symbol");
-        result.push(item.car.name);
+        result.push(item.car);
         item = item.cdr;
     }
     if (!(item instanceof NilExpr))
@@ -232,7 +281,7 @@ export class NilExpr extends SExpr {
         console.log(indent + "NIL");
     }
 
-    public build(): ASTNode {
+    public build(scope: LexicalScope): ASTNode {
         throw new BuildError(this.range, "Unexpected nil");
     }
 }

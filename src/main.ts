@@ -16,6 +16,7 @@ import * as fs from "fs";
 import { Parser } from "./parse";
 import { SExpr, BuildError } from "./sexpr";
 import { SourceCoords, SourceInput, testSourceCoords } from "./source";
+import { LexicalScope } from "./scope";
 
 // console.log("Hello World");
 // const p = new Parser("(test 1 2 3)");
@@ -37,10 +38,23 @@ function main(): void {
     const p = new Parser(input);
 
     try {
+        const toplevelScope = new LexicalScope(null);
+        toplevelScope.addOwnSlot("+");
+        toplevelScope.addOwnSlot("-");
+        toplevelScope.addOwnSlot("*");
+        toplevelScope.addOwnSlot("/");
+        toplevelScope.addOwnSlot("%");
+        toplevelScope.addOwnSlot("=");
+        toplevelScope.addOwnSlot("!=");
+        toplevelScope.addOwnSlot("<");
+        toplevelScope.addOwnSlot("<=");
+        toplevelScope.addOwnSlot(">");
+        toplevelScope.addOwnSlot(">=");
+        toplevelScope.addOwnSlot("fac");
         const items = p.parseTopLevel();
         for (const item of items) {
             // item.dump("");
-            const built = item.build();
+            const built = item.build(toplevelScope);
             // console.log("" + built);
             built.dump("");
         }
