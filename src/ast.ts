@@ -324,12 +324,13 @@ export class ApplyNode extends ASTNode {
         //     return;
         // }
 
-        console.log("evaluateProc " + id + ": proc = " + procValue);
-        for (let i = 0; i < argArray.length; i++) {
-            console.log("evaluateProc " + id + ": args[" + i + "] = " + argArray[i]);
-        }
 
         if (procValue instanceof BuiltinProcedureValue) {
+            console.log("evaluateProc " + id + " (builtin): proc = " + procValue);
+            for (let i = 0; i < argArray.length; i++) {
+                console.log("evaluateProc " + id + " (builtin): args[" + i + "] = " + argArray[i]);
+            }
+
             procValue.proc(argArray,
                 // success continuation
                 (value: Value): void => {
@@ -343,6 +344,11 @@ export class ApplyNode extends ASTNode {
                 });
         }
         else if (procValue instanceof LambdaProcedureValue) {
+            console.log("evaluateProc " + id + " (lambda): proc = " + procValue);
+            for (let i = 0; i < argArray.length; i++) {
+                console.log("evaluateProc " + id + " (lambda): args[" + i + "] = " + argArray[i]);
+            }
+
             const outerEnv = procValue.env;
             const lambdaNode = procValue.proc;
 
