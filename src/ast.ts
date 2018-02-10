@@ -165,18 +165,15 @@ export class IfNode extends ASTNode {
     }
 
     public evaluate(env: Environment, succeed: Continuation, fail: Continuation): void {
-        this.condition.evaluate(env,
-            // success continuation
-            (value: Value): void => {
-                if (!(value instanceof BooleanValue) || (value.data !== false))
-                    this.consequent.evaluate(env, succeed, fail);
-                else if (this.alternative !== null)
-                    this.alternative.evaluate(env, succeed, fail);
-                else
-                    succeed(new BooleanValue(true));
-            },
-            // failure continuation
-            fail);
+        const succeed2: Continuation = (value: Value): void => {
+            if (!(value instanceof BooleanValue) || (value.data !== false))
+                this.consequent.evaluate(env, succeed, fail);
+            else if (this.alternative !== null)
+                this.alternative.evaluate(env, succeed, fail);
+            else
+                succeed(new BooleanValue(true));
+        };
+        this.condition.evaluate(env, succeed2, fail);
     }
 }
 
@@ -248,8 +245,6 @@ export class SequenceNode extends ASTNode {
 //     }
 // }
 
-let evaluateProcCount = 0;
-
 export class ApplyNode extends ASTNode {
     public _class_ApplyNode: any;
     public proc: ASTNode;
@@ -271,45 +266,26 @@ export class ApplyNode extends ASTNode {
     }
 
     public evaluate(env: Environment, succeed: Continuation, fail: Continuation): void {
-        console.log("ApplyNode.evaluate()");
-
-        this.proc.evaluate(env,
-            // success continuation
-            (procValue: Value): void => {
-                console.log("proc evaluated to " + procValue);
-                this.evaluateArg(procValue, 0, NilValue.instance, env, succeed, fail);
-            },
-            // failure continuation
-            (error: Value): void => {
-                fail(error);
-            });
+        const succeed2: Continuation = (procValue: Value): void => {
+            this.evaluateArg(procValue, 0, NilValue.instance, env, succeed, fail);
+        };
+        this.proc.evaluate(env, succeed2, fail);
     }
 
     public evaluateArg(procValue: Value, argno: number, prev: Value, env: Environment, succeed: Continuation, fail: Continuation): void {
         if (argno >= this.args.length) {
             this.evaluateProc(procValue, prev, env, succeed, fail);
+            return;
         }
-        else {
-            this.args[argno].evaluate(env,
-                // success continuation
-                (argValue: Value): void => {
-                    const lst = new PairValue(argValue, prev);
-                    if (argno + 1 >= this.args.length) {
-                        this.evaluateProc(procValue, lst, env, succeed, fail);
-                    }
-                    else {
-                        this.evaluateArg(procValue, argno + 1, lst, env, succeed, fail);
-                    }
-                },
-                // failure continuation
-                (error: Value): void => {
-                    fail(error);
-                });
-        }
+
+        const succeed2: Continuation = (argValue: Value): void => {
+            const lst = new PairValue(argValue, prev);
+            this.evaluateArg(procValue, argno + 1, lst, env, succeed, fail);
+        };
+        this.args[argno].evaluate(env, succeed2, fail);
     }
 
     public evaluateProc(procValue: Value, argList: Value, env: Environment, succeed: Continuation, fail: Continuation): void {
-        const id = evaluateProcCount++;
         const argArray: Value[] = [];
         while ((argList instanceof PairValue)) {
             argArray.push(argList.car);
@@ -320,29 +296,9 @@ export class ApplyNode extends ASTNode {
         argArray.reverse();
 
         if (procValue instanceof BuiltinProcedureValue) {
-            console.log("evaluateProc " + id + " (builtin): proc = " + procValue);
-            for (let i = 0; i < argArray.length; i++) {
-                console.log("evaluateProc " + id + " (builtin): args[" + i + "] = " + argArray[i]);
-            }
-
-            procValue.proc(argArray,
-                // success continuation
-                (value: Value): void => {
-                    console.log("evaluateProc " + id + " (builtin): success; value = " + value);
-                    succeed(value);
-                },
-                // failure continuation
-                (error: Value): void => {
-                    console.log("evaluateProc " + id + " (builtin): failure; error = " + error);
-                    fail(error);
-                });
+            procValue.proc(argArray, succeed, fail);
         }
         else if (procValue instanceof LambdaProcedureValue) {
-            console.log("evaluateProc " + id + " (lambda): proc = " + procValue);
-            for (let i = 0; i < argArray.length; i++) {
-                console.log("evaluateProc " + id + " (lambda): args[" + i + "] = " + argArray[i]);
-            }
-
             const outerEnv = procValue.env;
             const lambdaNode = procValue.proc;
 
@@ -354,7 +310,6 @@ export class ApplyNode extends ASTNode {
                 return;
             }
 
-
             const innerEnv = new Environment(lambdaNode.innerScope, outerEnv);
             for (let i = 0; i < argArray.length; i++) {
                 if (i >= lambdaNode.variables.length) { // sanity check
@@ -364,33 +319,15 @@ export class ApplyNode extends ASTNode {
                     throw new Error("Invalid argument number: more than # slots");
                 }
                 const variable = innerEnv.getVar(i, lambdaNode.variables[i], lambdaNode.innerScope.slots[i]);
-                console.log("evaluateProc " + id + " (lambda): binding " + lambdaNode.variables[i] + " = " + argArray[i]);
                 variable.value = argArray[i];
             }
 
-            // procValue.proc.body.evaluate(innerEnv, succeed, fail);
-
-            procValue.proc.body.evaluate(innerEnv,
-                // success continuation
-                (value: Value): void => {
-                    console.log("evaluateProc " + id + " (lambda): success; value = " + value);
-                    succeed(value);
-                },
-                // failure continuation
-                (error: Value): void => {
-                    console.log("evaluateProc " + id + " (lambda): failure; error = " + error);
-                    fail(error);
-                });
+            procValue.proc.body.evaluate(innerEnv, succeed, fail);
         }
         else {
             fail(new StringValue("Cannot apply " + procValue));
             return;
         }
-
-        // procValue.proc(argArray, succeed, fail);
-
-
-
    }
 }
 
@@ -427,8 +364,6 @@ export interface LetrecBinding {
     body: ASTNode;
 }
 
-let evalLetrecCount = 0;
-
 export class LetrecNode extends ASTNode {
     public _class_LetrecNode: any;
     public innerScope: LexicalScope;
@@ -453,8 +388,6 @@ export class LetrecNode extends ASTNode {
     }
 
     public evaluate(env: Environment, succeed: Continuation, fail: Continuation): void {
-        // fail(new StringValue("letrec evaluate not implemented"));
-        console.log("letrec evaluate");
         const innerEnv = new Environment(this.innerScope, env);
         this.evalBinding(0, NilValue.instance, innerEnv, succeed, fail);
     }
@@ -462,24 +395,17 @@ export class LetrecNode extends ASTNode {
     public evalBinding(bindingIndex: number, prev: Value, innerEnv: Environment, succeed: Continuation, fail: Continuation): void {
         if (bindingIndex >= this.bindings.length) {
             this.evalBody(prev, innerEnv, succeed, fail);
+            return;
         }
-        else {
-            console.log("letrec evalBinding " + bindingIndex);
-            this.bindings[bindingIndex].body.evaluate(innerEnv,
-                // success continuation
-                (value: Value): void => {
-                    const lst = new PairValue(value, prev);
-                    this.evalBinding(bindingIndex + 1, lst, innerEnv, succeed, fail);
-                },
-                // failure continuation
-                (error: Value): void => {
-                    fail(error);
-                });
-        }
+
+        const succeed2: Continuation = (value: Value): void => {
+            const lst = new PairValue(value, prev);
+            this.evalBinding(bindingIndex + 1, lst, innerEnv, succeed, fail);
+        };
+        this.bindings[bindingIndex].body.evaluate(innerEnv, succeed2, fail);
     }
 
     public evalBody(bindingList: Value, innerEnv: Environment, succeed: Continuation, fail: Continuation): void {
-        const id = evalLetrecCount++;
         const bindingArray: Value[] = [];
         while ((bindingList instanceof PairValue)) {
             bindingArray.push(bindingList.car);
@@ -488,8 +414,6 @@ export class LetrecNode extends ASTNode {
         if (!(bindingList instanceof NilValue))
             throw new Error("bindingList should be nil");
         bindingArray.reverse();
-        console.log("letrec evalBody " + id + ": bindingArray.length = " + bindingArray.length);
-
 
         for (let i = 0; i < bindingArray.length; i++) {
             if (i >= this.bindings.length) { // sanity check
@@ -499,21 +423,9 @@ export class LetrecNode extends ASTNode {
                 throw new Error("Invalid argument number: more than # slots");
             }
             const variable = innerEnv.getVar(i, this.bindings[i].ref.target.name, this.innerScope.slots[i]);
-            console.log("letrec evalBody " + id + ": binding " + this.bindings[i].ref.target.name + " = " + bindingArray[i]);
             variable.value = bindingArray[i];
         }
 
-        console.log("letrec evalBody " + id + ": starting evaluation of body");
-        this.body.evaluate(innerEnv,
-            // success continuation
-            (value: Value): void => {
-                console.log("letrec evalBody " + id + ": success; value = " + value);
-                succeed(value);
-            },
-            // failure continuation
-            (error: Value): void => {
-                console.log("letrec evalBody " + id + ": failure; error = " + error);
-                fail(error);
-            });
+        this.body.evaluate(innerEnv, succeed, fail);
     }
 }
