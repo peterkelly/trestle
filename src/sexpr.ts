@@ -256,10 +256,18 @@ export class PairExpr extends SExpr {
                 //     }
                 // }
                 case "lambda": {
-                    if (items.length !== 3)
-                        throw new BuildError(first.range, "lambda requires exactly two arguments");
-                    const names = getFormalParameterNames(items[1]);
-                    return buildLambda(scope, names, items[2]);
+                    // if (items.length !== 3)
+                    //     throw new BuildError(first.range, "lambda requires exactly two arguments");
+                    const paramsPtr = this.cdr;
+                    if (!(paramsPtr instanceof PairExpr))
+                        throw new BuildError(first.range, "lambda requires at least two arguments");
+                    const bodyPtr = paramsPtr.cdr;
+                    if (!(bodyPtr instanceof PairExpr))
+                        throw new BuildError(first.range, "lambda requires at least two arguments");
+
+
+                    const names = getFormalParameterNames(paramsPtr.car);
+                    return buildLambda(scope, names, bodyPtr);
                     // const innerScope = makeInnerScope(scope, names);
                     // const body = items[2].build(innerScope);
                     // return new LambdaNode(names, body);
@@ -370,9 +378,10 @@ export function buildSequenceFromList(scope: LexicalScope, list: PairExpr): ASTN
     }
 }
 
-function buildLambda(scope: LexicalScope, names: SymbolExpr[], body: SExpr): LambdaNode {
+function buildLambda(scope: LexicalScope, names: SymbolExpr[], body: PairExpr): LambdaNode {
     const innerScope = makeInnerScope(scope, names);
-    return new LambdaNode(names.map(e => e.name), innerScope, body.build(innerScope));
+    const bodyNode = buildSequenceFromList(innerScope, body);
+    return new LambdaNode(names.map(e => e.name), innerScope, bodyNode);
 }
 
 function makeInnerScope(outer: LexicalScope, symbols: SymbolExpr[]): LexicalScope {
