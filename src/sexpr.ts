@@ -34,6 +34,7 @@ import {
 } from "./scope";
 import {
     Value,
+    BooleanValue,
     NumberValue,
     StringValue,
     SymbolValue,
@@ -65,6 +66,28 @@ export abstract class SExpr {
     public abstract dump(indent: string): void;
 
     public abstract build(scope: LexicalScope): ASTNode;
+}
+
+export class BooleanExpr extends SExpr {
+    public _class_BooleanExpr: any;
+    public value: boolean;
+
+    public constructor(range: SourceRange, value: boolean) {
+        super(range);
+        this.value = value;
+    }
+
+    public toValue(): Value {
+        return new BooleanValue(this.value);
+    }
+
+    public dump(indent: string): void {
+        console.log(indent + "BOOLEAN " + this.value);
+    }
+
+    public build(scope: LexicalScope): ASTNode {
+        return new ConstantNode(this);
+    }
 }
 
 export class NumberExpr extends SExpr {

@@ -38,7 +38,7 @@ export class BooleanValue extends Value {
     }
 
     public print(output: string[], visiting: Set<Value>): void {
-        output.push("" + this.data);
+        output.push(this.data ? "#t" : "#f");
     }
 }
 

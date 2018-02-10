@@ -14,6 +14,7 @@
 
 import {
     SExpr,
+    BooleanExpr,
     NumberExpr,
     StringExpr,
     SymbolExpr,
@@ -48,6 +49,7 @@ function isSymbolChar(c: string): boolean {
         case "'":
         case "(":
         case ")":
+        case "#":
         case " ":
         case "\t":
         case "\r":
@@ -192,7 +194,32 @@ export class Parser {
 
     }
 
+    public parseHash(): SExpr {
+        const start = this.getLocation();
+        if (!((this.pos < this.len) && (this.input[this.pos] === "#")))
+            throw new ParseError(start, "Expected #");
+        this.pos++;
+        if ((this.pos < this.len) && (this.input[this.pos] === "t")) {
+            this.pos++;
+            const range = this.getRangeFrom(start);
+            return new BooleanExpr(range, true);
+        }
+        else if ((this.pos < this.len) && (this.input[this.pos] === "f")) {
+            this.pos++;
+            const range = this.getRangeFrom(start);
+            return new BooleanExpr(range, false);
+        }
+        else if (this.pos < this.len) {
+            throw new ParseError(start, "Unexpected input: #" + this.input[this.pos]);
+        }
+        else {
+            throw new ParseError(this.getLocation(), "Unexpected end of input");
+        }
+    }
+
     public parseExpression(): SExpr {
+        if (this.pos >= this.len)
+            throw new ParseError(this.getLocation(), "Unexpected end of input");
         if (isDigitChar(this.input[this.pos]))
             return this.parseNumber();
         else if (this.input[this.pos] === "\"")
@@ -203,6 +230,8 @@ export class Parser {
             return this.parseQuote();
         else if (this.input[this.pos] === "(")
             return this.parseList();
+        else if (this.input[this.pos] === "#")
+            return this.parseHash();
         else
             throw new ParseError(this.getLocation(), "Unexpected character: " + this.input[this.pos]);
     }
