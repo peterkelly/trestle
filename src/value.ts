@@ -105,16 +105,38 @@ export class PairValue extends Value {
         this.cdr = cdr;
     }
 
+    public isList(): boolean {
+        let item: Value = this;
+        while (item instanceof PairValue)
+            item = item.cdr;
+        return (item instanceof NilValue);
+    }
+
     public print(output: string[], visiting: Set<Value>): void {
         if (visiting.has(this)) {
             output.push("*recursive*");
             return;
         }
+
         visiting.add(this);
-        output.push("(");
-        this.car.print(output, visiting);
-        output.push(" . ");
-        this.cdr.print(output, visiting);
+        if (this.isList()) {
+            output.push("(");
+            let item: Value = this;
+            while (item instanceof PairValue) {
+                item.car.print(output, visiting);
+                if (item.cdr instanceof PairValue)
+                    output.push(" ");
+                item = item.cdr;
+            }
+            output.push(")");
+        }
+        else {
+            output.push("(");
+            this.car.print(output, visiting);
+            output.push(" . ");
+            this.cdr.print(output, visiting);
+            output.push(")");
+        }
         visiting.delete(this);
     }
 }

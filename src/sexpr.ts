@@ -178,7 +178,7 @@ export class QuoteExpr extends SExpr {
     }
 
     public build(scope: LexicalScope): ASTNode {
-        return new ConstantNode(this);
+        return new ConstantNode(this.body);
     }
 }
 
