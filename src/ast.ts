@@ -204,5 +204,7 @@ export class LetrecNode extends ASTNode {
             console.log(indent + "    Binding " + binding.ref.target.name);
             binding.body.dump(indent + "        ");
         }
+        console.log(indent + "    Body");
+        this.body.dump(indent + "        ");
     }
 }
