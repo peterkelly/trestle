@@ -293,15 +293,15 @@ export class ApplyNode extends ASTNode {
             });
     }
 
-    public evaluateProc(procValue: Value, arglist: Value, env: Environment, succeed: Continuation, fail: Continuation): void {
+    public evaluateProc(procValue: Value, argList: Value, env: Environment, succeed: Continuation, fail: Continuation): void {
         const id = evaluateProcCount++;
         const argArray: Value[] = [];
-        while ((arglist instanceof PairValue)) {
-            argArray.push(arglist.car);
-            arglist = arglist.cdr;
+        while ((argList instanceof PairValue)) {
+            argArray.push(argList.car);
+            argList = argList.cdr;
         }
-        if (!(arglist instanceof NilValue))
-            throw new Error("arglist should be nil");
+        if (!(argList instanceof NilValue))
+            throw new Error("argList should be nil");
         argArray.reverse();
 
         // if (!(procValue instanceof BuiltinProcedureValue)) {
@@ -412,15 +412,17 @@ export interface LetrecBinding {
     body: ASTNode;
 }
 
+let evalLetrecCount = 0;
+
 export class LetrecNode extends ASTNode {
     public _class_LetrecNode: any;
-    public scope: LexicalScope;
+    public innerScope: LexicalScope;
     public bindings: LetrecBinding[];
     public body: ASTNode;
 
-    public constructor(scope: LexicalScope, bindings: LetrecBinding[], body: ASTNode) {
+    public constructor(innerScope: LexicalScope, bindings: LetrecBinding[], body: ASTNode) {
         super();
-        this.scope = scope;
+        this.innerScope = innerScope;
         this.bindings = bindings;
         this.body = body;
     }
@@ -436,5 +438,63 @@ export class LetrecNode extends ASTNode {
     }
 
     public evaluate(env: Environment, succeed: Continuation, fail: Continuation): void {
+        // fail(new StringValue("letrec evaluate not implemented"));
+        this.evalBinding(0, NilValue.instance, env, succeed, fail);
+    }
+
+    public evalBinding(bindingIndex: number, prev: Value, env: Environment, succeed: Continuation, fail: Continuation): void {
+        if (bindingIndex >= this.bindings.length) {
+            this.evalBody(prev, env, succeed, fail);
+        }
+        else {
+            this.bindings[bindingIndex].body.evaluate(env,
+                // success continuation
+                (value: Value): void => {
+                    const lst = new PairValue(value, prev);
+                    this.evalBinding(bindingIndex + 1, lst, env, succeed, fail);
+                },
+                // failure continuation
+                (error: Value): void => {
+                    fail(error);
+                });
+        }
+    }
+
+    public evalBody(bindingList: Value, env: Environment, succeed: Continuation, fail: Continuation): void {
+        const id = evalLetrecCount++;
+        const bindingArray: Value[] = [];
+        while ((bindingList instanceof PairValue)) {
+            bindingArray.push(bindingList.car);
+            bindingList = bindingList.cdr;
+        }
+        if (!(bindingList instanceof NilValue))
+            throw new Error("bindingList should be nil");
+        bindingArray.reverse();
+
+
+        const innerEnv = new Environment(this.innerScope, env);
+        for (let i = 0; i < bindingArray.length; i++) {
+            if (i >= this.bindings.length) { // sanity check
+                throw new Error("Invalid argument number: more than # bindings");
+            }
+            if (i >= this.innerScope.slots.length) { // sanity check
+                throw new Error("Invalid argument number: more than # slots");
+            }
+            const variable = innerEnv.getVar(i, this.bindings[i].ref.target.name, this.innerScope.slots[i]);
+            console.log("letrec evalBody " + id + ": binding " + this.bindings[i].ref.target.name + " = " + bindingArray[i]);
+            variable.value = bindingArray[i];
+        }
+
+        this.body.evaluate(innerEnv,
+            // success continuation
+            (value: Value): void => {
+                console.log("letrec evalBody " + id + ": success; value = " + value);
+                succeed(value);
+            },
+            // failure continuation
+            (error: Value): void => {
+                console.log("letrec evalBody " + id + ": failure; error = " + error);
+                fail(error);
+            });
     }
 }
