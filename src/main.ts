@@ -15,7 +15,7 @@
 import * as fs from "fs";
 import { Parser } from "./parse";
 import { NilExpr, BuildError, buildSequenceFromList } from "./sexpr";
-import { SourceCoords, SourceInput, testSourceCoords } from "./source";
+import { SourceInput, testSourceCoords } from "./source";
 import { LexicalScope } from "./scope";
 import { Environment, BuiltinProcedureValue, builtins } from "./runtime";
 import { Value } from "./value";
