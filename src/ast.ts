@@ -277,12 +277,7 @@ export class ApplyNode extends ASTNode {
             // success continuation
             (procValue: Value): void => {
                 console.log("proc evaluated to " + procValue);
-                if (this.args.length >= 0) {
-                    this.evaluateArg(procValue, 0, NilValue.instance, env, succeed, fail);
-                }
-                else {
-                    this.evaluateProc(procValue, NilValue.instance, env, succeed, fail);
-                }
+                this.evaluateArg(procValue, 0, NilValue.instance, env, succeed, fail);
             },
             // failure continuation
             (error: Value): void => {
@@ -291,21 +286,26 @@ export class ApplyNode extends ASTNode {
     }
 
     public evaluateArg(procValue: Value, argno: number, prev: Value, env: Environment, succeed: Continuation, fail: Continuation): void {
-        this.args[argno].evaluate(env,
-            // success continuation
-            (argValue: Value): void => {
-                const lst = new PairValue(argValue, prev);
-                if (argno + 1 >= this.args.length) {
-                    this.evaluateProc(procValue, lst, env, succeed, fail);
-                }
-                else {
-                    this.evaluateArg(procValue, argno + 1, lst, env, succeed, fail);
-                }
-            },
-            // failure continuation
-            (error: Value): void => {
-                fail(error);
-            });
+        if (argno >= this.args.length) {
+            this.evaluateProc(procValue, prev, env, succeed, fail);
+        }
+        else {
+            this.args[argno].evaluate(env,
+                // success continuation
+                (argValue: Value): void => {
+                    const lst = new PairValue(argValue, prev);
+                    if (argno + 1 >= this.args.length) {
+                        this.evaluateProc(procValue, lst, env, succeed, fail);
+                    }
+                    else {
+                        this.evaluateArg(procValue, argno + 1, lst, env, succeed, fail);
+                    }
+                },
+                // failure continuation
+                (error: Value): void => {
+                    fail(error);
+                });
+        }
     }
 
     public evaluateProc(procValue: Value, argList: Value, env: Environment, succeed: Continuation, fail: Continuation): void {
@@ -318,12 +318,6 @@ export class ApplyNode extends ASTNode {
         if (!(argList instanceof NilValue))
             throw new Error("argList should be nil");
         argArray.reverse();
-
-        // if (!(procValue instanceof BuiltinProcedureValue)) {
-        //     fail(new StringValue("Cannot apply " + procValue));
-        //     return;
-        // }
-
 
         if (procValue instanceof BuiltinProcedureValue) {
             console.log("evaluateProc " + id + " (builtin): proc = " + procValue);
