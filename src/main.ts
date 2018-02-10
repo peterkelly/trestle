@@ -17,8 +17,9 @@ import { Parser } from "./parse";
 import { NilExpr, BuildError, buildSequenceFromList } from "./sexpr";
 import { SourceInput, testSourceCoords } from "./source";
 import { LexicalScope } from "./scope";
-import { Environment, BuiltinProcedureValue, builtins } from "./runtime";
+import { Environment } from "./runtime";
 import { Value } from "./value";
+import { BuiltinProcedureValue, builtins } from "./builtins";
 
 // console.log("Hello World");
 // const p = new Parser("(test 1 2 3)");
@@ -44,18 +45,6 @@ function main(): void {
         for (const name of Object.keys(builtins).sort()) {
             toplevelScope.addOwnSlot(name);
         }
-        // toplevelScope.addOwnSlot("+");
-        // toplevelScope.addOwnSlot("-");
-        // toplevelScope.addOwnSlot("*");
-        // toplevelScope.addOwnSlot("/");
-        // toplevelScope.addOwnSlot("%");
-        // toplevelScope.addOwnSlot("=");
-        // toplevelScope.addOwnSlot("!=");
-        // toplevelScope.addOwnSlot("<");
-        // toplevelScope.addOwnSlot("<=");
-        // toplevelScope.addOwnSlot(">");
-        // toplevelScope.addOwnSlot(">=");
-        // toplevelScope.addOwnSlot("fac");
         const itemList = p.parseTopLevel();
         if (!(itemList instanceof NilExpr)) {
             itemList.dump("");

@@ -15,7 +15,8 @@
 import { SExpr } from "./sexpr";
 import { LexicalRef, LexicalScope } from "./scope";
 import { Value, StringValue, PairValue, NilValue, BooleanValue } from "./value";
-import { Environment, Continuation, BuiltinProcedureValue } from "./runtime";
+import { Environment, Continuation } from "./runtime";
+import { BuiltinProcedureValue } from "./builtins";
 
 export abstract class ASTNode {
     public _class_ASTNode: any;
