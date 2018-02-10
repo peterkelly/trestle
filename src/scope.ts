@@ -25,6 +25,7 @@ export class LexicalSlot {
 
 export interface LexicalRef {
     source: LexicalScope;
+    name: string;
     depth: number;
     index: number;
     target: LexicalSlot;
@@ -33,8 +34,9 @@ export interface LexicalRef {
 export class LexicalScope {
     public _class_LexicalScope: any;
     public outer: LexicalScope | null;
-    private entries = new Map<string, LexicalSlot>();
+    private slotsByName = new Map<string, LexicalSlot>();
     private numSlots = 0;
+    public slots: LexicalSlot[] = [];
 
     public constructor(outer: LexicalScope | null) {
         this.outer = outer;
@@ -44,10 +46,11 @@ export class LexicalScope {
         let cur: LexicalScope | null = this;
         let depth = 0;
         while (cur != null) {
-            const slot = cur.entries.get(name);
+            const slot = cur.slotsByName.get(name);
             if (slot !== undefined) {
                 return {
                     source: this,
+                    name: name,
                     depth: depth,
                     index: slot.index,
                     target: slot,
@@ -70,7 +73,7 @@ export class LexicalScope {
     }
 
     public hasOwnSlot(name: string): boolean {
-        return this.entries.has(name);
+        return this.slotsByName.has(name);
     }
 
     public addOwnSlot(name: string): LexicalRef {
@@ -78,9 +81,11 @@ export class LexicalScope {
             throw new Error("Slot for " + name + " already allocated");
         const index = this.numSlots++;
         const slot = new LexicalSlot(index, name);
-        this.entries.set(name, slot);
+        this.slotsByName.set(name, slot);
+        this.slots.push(slot);
         return {
             source: this,
+            name: name,
             depth: 0,
             index: index,
             target: slot

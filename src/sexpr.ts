@@ -32,10 +32,19 @@ import {
     LexicalRef,
     LexicalScope,
 } from "./scope";
+import {
+    Value,
+    NumberValue,
+    StringValue,
+    SymbolValue,
+    PairValue,
+    NilValue,
+} from "./value";
 
 export class BuildError extends Error {
     public readonly range: SourceRange;
     public readonly detail: string;
+
     public constructor(range: SourceRange, detail: string) {
         super(range + ": " + detail);
         this.range = range;
@@ -51,6 +60,8 @@ export abstract class SExpr {
         this.range = range;
     }
 
+    public abstract toValue(): Value;
+
     public abstract dump(indent: string): void;
 
     public abstract build(scope: LexicalScope): ASTNode;
@@ -63,6 +74,10 @@ export class NumberExpr extends SExpr {
     public constructor(range: SourceRange, value: number) {
         super(range);
         this.value = value;
+    }
+
+    public toValue(): Value {
+        return new NumberValue(this.value);
     }
 
     public dump(indent: string): void {
@@ -83,6 +98,10 @@ export class StringExpr extends SExpr {
         this.value = value;
     }
 
+    public toValue(): Value {
+        return new StringValue(this.value);
+    }
+
     public dump(indent: string): void {
         console.log(indent + "STRING " + JSON.stringify(this.value));
     }
@@ -99,6 +118,10 @@ export class SymbolExpr extends SExpr {
     public constructor(range: SourceRange, name: string) {
         super(range);
         this.name = name;
+    }
+
+    public toValue(): Value {
+        return new SymbolValue(this.name);
     }
 
     public dump(indent: string): void {
@@ -122,6 +145,10 @@ export class QuoteExpr extends SExpr {
         this.body = body;
     }
 
+    public toValue(): Value {
+        return new PairValue(new SymbolValue("quote"), this.body.toValue());
+    }
+
     public dump(indent: string): void {
         console.log(indent + "QUOTE");
         this.body.dump(indent + "    ");
@@ -141,6 +168,10 @@ export class PairExpr extends SExpr {
         super(range);
         this.car = car;
         this.cdr = cdr;
+    }
+
+    public toValue(): Value {
+        return new PairValue(this.car.toValue(), this.cdr.toValue());
     }
 
     public dump(indent: string): void {
@@ -300,25 +331,6 @@ function buildLetrecDefs(inner: LexicalScope, defsList: SExpr): LetrecBinding[] 
         result.push({ ref, body });
     }
     return result;
-
-
-    // const item = defsList;
-    // while (item instanceof PairExpr) {
-    //     const varDef = item.car;
-    //     if (!(varDef instanceof PairExpr))
-    //         throw new BuildError(varDef.range, "Letrec binding must be a pair");
-
-    //     const nameExpr = varDef.car;
-    //     const bodyExpr = varDef.cdr;
-
-    //     if (!(nameExpr instanceof SymbolExpr))
-    //         throw new BuildError(nameExpr.range, "name must be a symbol");
-
-    //     item = item.cdr;
-    // }
-    // if (!(item instanceof NilExpr))
-    //     throw new BuildError(item.range, "Expected a list");
-    // return result;
 }
 
 export function buildSequenceFromList(scope: LexicalScope, list: PairExpr): ASTNode {
@@ -369,6 +381,10 @@ export class NilExpr extends SExpr {
 
     public constructor(range: SourceRange) {
         super(range);
+    }
+
+    public toValue(): Value {
+        return NilValue.instance;
     }
 
     public dump(indent: string): void {

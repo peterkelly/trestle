@@ -14,6 +14,8 @@
 
 import { SExpr } from "./sexpr";
 import { LexicalRef, LexicalScope } from "./scope";
+import { Value, StringValue, PairValue, NilValue } from "./value";
+import { Environment, Continuation, BuiltinProcedureValue } from "./runtime";
 
 export abstract class ASTNode {
     public _class_ASTNode: any;
@@ -22,6 +24,10 @@ export abstract class ASTNode {
     }
 
     public abstract dump(indent: string): void;
+
+    public evaluate(env: Environment, succeed: Continuation, fail: Continuation): void {
+        throw new Error((<any> this).constructor.name + ".evaluate() not implemented");
+    }
 }
 
 export class ConstantNode extends ASTNode {
@@ -35,6 +41,66 @@ export class ConstantNode extends ASTNode {
     public dump(indent: string): void {
         console.log(indent + "Constant");
         this.value.dump(indent + "    ");
+    }
+
+    public evaluate(env: Environment, succeed: Continuation, fail: Continuation): void {
+        succeed(this.value.toValue());
+    }
+}
+
+export class TryNode extends ASTNode {
+    public _class_TryNode: any;
+    public tryBody: ASTNode;
+    public catchBody: ASTNode;
+
+    public constructor(tryBody: ASTNode, catchBody: ASTNode) {
+        super();
+        this.tryBody = tryBody;
+        this.catchBody = catchBody;
+    }
+
+    public dump(indent: string): void {
+        console.log(indent + "Try-Catch");
+        console.log(indent + "    Try");
+        this.tryBody.dump(indent + "        ");
+        console.log(indent + "    Catch");
+        this.catchBody.dump(indent + "        ");
+    }
+
+    public evaluate(env: Environment, succeed: Continuation, fail: Continuation): void {
+        this.tryBody.evaluate(env,
+            // success continuation
+            (value: Value): void => {
+                succeed(value);
+            },
+            // failure continuation
+            (value: Value): void => {
+                // FIXME: the catch body should be a LambaNode, and we should pass the value to it
+                this.catchBody.evaluate(env, succeed, fail);
+            });
+    }
+}
+
+export class ThrowNode extends ASTNode {
+    public _class_ThrowNode: any;
+    public body: ASTNode;
+
+    public constructor(body: ASTNode) {
+        super();
+        this.body = body;
+    }
+
+    public dump(indent: string): void {
+        console.log(indent + "Throw");
+        this.body.dump(indent + "    ");
+    }
+
+    public evaluate(env: Environment, succeed: Continuation, fail: Continuation): void {
+        // If the throw succeeds (the exception expression was evaluated successfully), then we
+        // call fail with the computed value.
+        // If the throw fails (another exception occurred while trying to evaluate the expression),
+        // then we call fail with that exception. Either way, we fail.
+        this.body.evaluate(env, fail, fail);
     }
 }
 
@@ -145,6 +211,8 @@ export class SequenceNode extends ASTNode {
 //     }
 // }
 
+let evaluateProcCount = 0;
+
 export class ApplyNode extends ASTNode {
     public _class_ApplyNode: any;
     public proc: ASTNode;
@@ -164,6 +232,82 @@ export class ApplyNode extends ASTNode {
             this.args[i].dump(indent + "        ");
         }
     }
+
+    public evaluate(env: Environment, succeed: Continuation, fail: Continuation): void {
+        console.log("ApplyNode.evaluate()");
+
+        this.proc.evaluate(env,
+            // success continuation
+            (procValue: Value): void => {
+                console.log("proc evaluated to " + procValue);
+                if (this.args.length >= 0) {
+                    this.evaluateArg(procValue, 0, NilValue.instance, env, succeed, fail);
+                }
+                else {
+                    this.evaluateProc(procValue, NilValue.instance, env, succeed, fail);
+                }
+            },
+            // failure continuation
+            (error: Value): void => {
+                fail(error);
+            });
+    }
+
+    public evaluateArg(procValue: Value, argno: number, prev: Value, env: Environment, succeed: Continuation, fail: Continuation): void {
+        this.args[argno].evaluate(env,
+            // success continuation
+            (argValue: Value): void => {
+                const lst = new PairValue(argValue, prev);
+                if (argno + 1 >= this.args.length) {
+                    this.evaluateProc(procValue, lst, env, succeed, fail);
+                }
+                else {
+                    this.evaluateArg(procValue, argno + 1, lst, env, succeed, fail);
+                }
+            },
+            // failure continuation
+            (error: Value): void => {
+                fail(error);
+            });
+    }
+
+    public evaluateProc(procValue: Value, arglist: Value, env: Environment, succeed: Continuation, fail: Continuation): void {
+        const id = evaluateProcCount++;
+        const argArray: Value[] = [];
+        while ((arglist instanceof PairValue)) {
+            argArray.push(arglist.car);
+            arglist = arglist.cdr;
+        }
+        if (!(arglist instanceof NilValue))
+            throw new Error("arglist should be nil");
+        argArray.reverse();
+
+        if (!(procValue instanceof BuiltinProcedureValue)) {
+            fail(new StringValue("Cannot apply " + procValue));
+            return;
+        }
+
+        console.log("evaluateProc " + id + ": proc = " + procValue);
+        for (let i = 0; i < argArray.length; i++) {
+            console.log("evaluateProc " + id + ": args[" + i + "] = " + argArray[i]);
+        }
+
+        // procValue.proc(argArray, succeed, fail);
+
+        procValue.proc(argArray,
+            // success continuation
+            (value: Value): void => {
+                console.log("evaluateProc " + id + ": success; value = " + value);
+                succeed(value);
+            },
+            // failure continuation
+            (error: Value): void => {
+                console.log("evaluateProc " + id + ": failure; error = " + error);
+                fail(error);
+            });
+
+
+   }
 }
 
 export class VariableNode extends ASTNode {
@@ -177,6 +321,20 @@ export class VariableNode extends ASTNode {
 
     public dump(indent: string): void {
         console.log(indent + "Variable " + this.ref.target.name + " (" + this.ref.depth + "," + this.ref.index + ")");
+    }
+
+    public evaluate(env: Environment, succeed: Continuation, fail: Continuation): void {
+        let curDepth = 0;
+        while (curDepth < this.ref.depth) {
+            if (env.outer === null) {
+                fail(new StringValue("ref depth exhausted; current " + curDepth + " wanted " + this.ref.depth));
+                return;
+            }
+            env = env.outer;
+            curDepth++;
+        }
+        const variable = env.getVar(this.ref.index, this.ref.name, this.ref.target);
+        succeed(variable.value);
     }
 }
 
