@@ -12,7 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { Value, NumberValue, StringValue, BooleanValue } from "./value";
+import {
+    Value,
+    NumberValue,
+    StringValue,
+    SymbolValue,
+    BooleanValue,
+    PairValue,
+    NilValue,
+    UnspecifiedValue,
+} from "./value";
 import { Continuation } from "./runtime";
 
 export type BuiltinProcedure = (args: Value[], succeed: Continuation, fail: Continuation) => void;
@@ -169,6 +178,105 @@ const builtin_le = wrapNumRelational(num_le);
 const builtin_gt = wrapNumRelational(num_gt);
 const builtin_ge = wrapNumRelational(num_ge);
 
+function builtin_display(args: Value[], succeed: Continuation, fail: Continuation): void {
+    if (args.length !== 1) {
+        fail(new StringValue("display requires exactly one argument"));
+        return;
+    }
+    const value = args[0];
+    if (value instanceof StringValue)
+        process.stdout.write(value.data);
+    else
+        process.stdout.write(value.toString());
+    succeed(UnspecifiedValue.instance);
+}
+
+function builtin_newline(args: Value[], succeed: Continuation, fail: Continuation): void {
+    if (args.length !== 0) {
+        fail(new StringValue("newline does not accept any arguments"));
+        return;
+    }
+    process.stdout.write("\n");
+    succeed(UnspecifiedValue.instance);
+}
+
+function builtin_cons(args: Value[], succeed: Continuation, fail: Continuation): void {
+    if (args.length !== 2) {
+        fail(new StringValue("const requires exactly two arguments"));
+        return;
+    }
+    const pair = new PairValue(args[0], args[1]);
+    succeed(pair);
+}
+
+function builtin_car(args: Value[], succeed: Continuation, fail: Continuation): void {
+    if (args.length !== 1) {
+        fail(new StringValue("car requires exactly one argument"));
+        return;
+    }
+    const pair = args[0];
+    if (!(pair instanceof PairValue)) {
+        fail(new StringValue("car requires its argument to be a pair"));
+        return;
+    }
+    succeed(pair.car);
+}
+
+function builtin_cdr(args: Value[], succeed: Continuation, fail: Continuation): void {
+    if (args.length !== 1) {
+        fail(new StringValue("cdr requires exactly one argument"));
+        return;
+    }
+    const pair = args[0];
+    if (!(pair instanceof PairValue)) {
+        fail(new StringValue("cdr requires its argument to be a pair"));
+        return;
+    }
+    succeed(pair.cdr);
+}
+
+function builtin_boolean_q(args: Value[], succeed: Continuation, fail: Continuation): void {
+    if (args.length !== 1)
+        fail(new StringValue("boolean? requires exactly one argument"));
+    else
+        succeed(new BooleanValue(args[0] instanceof BooleanValue));
+}
+
+function builtin_symbol_q(args: Value[], succeed: Continuation, fail: Continuation): void {
+    if (args.length !== 1)
+        fail(new StringValue("symbol? requires exactly one argument"));
+    else
+        succeed(new BooleanValue(args[0] instanceof SymbolValue));
+}
+
+function builtin_pair_q(args: Value[], succeed: Continuation, fail: Continuation): void {
+    if (args.length !== 1)
+        fail(new StringValue("pair? requires exactly one argument"));
+    else
+        succeed(new BooleanValue(args[0] instanceof PairValue));
+}
+
+function builtin_number_q(args: Value[], succeed: Continuation, fail: Continuation): void {
+    if (args.length !== 1)
+        fail(new StringValue("number? requires exactly one argument"));
+    else
+        succeed(new BooleanValue(args[0] instanceof NumberValue));
+}
+
+function builtin_string_q(args: Value[], succeed: Continuation, fail: Continuation): void {
+    if (args.length !== 1)
+        fail(new StringValue("string? requires exactly one argument"));
+    else
+        succeed(new BooleanValue(args[0] instanceof StringValue));
+}
+
+function builtin_null_q(args: Value[], succeed: Continuation, fail: Continuation): void {
+    if (args.length !== 1)
+        fail(new StringValue("null? requires exactly one argument"));
+    else
+        succeed(new BooleanValue(args[0] instanceof NilValue));
+}
+
 export const builtins: { [name: string]: BuiltinProcedure } = {
     "+": builtin_add,
     "-": builtin_subtract,
@@ -181,4 +289,15 @@ export const builtins: { [name: string]: BuiltinProcedure } = {
     "<=": builtin_le,
     ">": builtin_gt,
     ">=": builtin_ge,
+    "display": builtin_display,
+    "newline": builtin_newline,
+    "cons": builtin_cons,
+    "car": builtin_car,
+    "cdr": builtin_cdr,
+    "boolean?": builtin_boolean_q,
+    "symbol?": builtin_symbol_q,
+    "pair?": builtin_pair_q,
+    "number?": builtin_number_q,
+    "string?": builtin_string_q,
+    "null?": builtin_null_q,
 };

@@ -237,6 +237,13 @@ export class SequenceNode extends ASTNode {
         }
         cur.dump(indent + "    ");
     }
+
+    public evaluate(env: Environment, succeed: Continuation, fail: Continuation): void {
+        const succeed2: Continuation = (value: Value): void => {
+            this.next.evaluate(env, succeed, fail);
+        };
+        this.body.evaluate(env, succeed2, fail);
+    }
 }
 
 // export class CondNode extends ASTNode {

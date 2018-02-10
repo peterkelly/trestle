@@ -134,7 +134,23 @@ export class Parser {
                 this.pos++;
                 if (this.pos >= this.len)
                     throw new ParseError(this.getLocation(), "Unexpected end of input");
-                value += this.input[this.pos];
+                switch (this.input[this.pos]) {
+                    case "n":
+                        value += "\n";
+                        break;
+                    case "r":
+                        value += "\r";
+                        break;
+                    case "t":
+                        value += "\t";
+                        break;
+                    case "\\":
+                        value += "\\";
+                        break;
+                    default:
+                        value += this.input[this.pos];
+                        break;
+                }
             }
             else if (this.input[this.pos] === "\"") {
                 this.pos++;

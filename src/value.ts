@@ -172,3 +172,17 @@ export class NilValue extends Value {
 
     public static instance = new NilValue();
 }
+
+export class UnspecifiedValue extends Value {
+    public _class_UnspecifiedValue: any;
+
+    private constructor() {
+        super();
+    }
+
+    public print(output: string[], visiting: Set<Value>): void {
+        output.push("*unspecified*");
+    }
+
+    public static instance = new UnspecifiedValue();
+}
