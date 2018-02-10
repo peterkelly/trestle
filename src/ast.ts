@@ -14,7 +14,7 @@
 
 import { SExpr } from "./sexpr";
 import { LexicalRef, LexicalScope } from "./scope";
-import { Value, StringValue, PairValue, NilValue, BooleanValue } from "./value";
+import { Value, StringValue, PairValue, NilValue, UnspecifiedValue } from "./value";
 import { Environment, Continuation } from "./runtime";
 import { BuiltinProcedureValue } from "./builtins";
 
@@ -167,12 +167,12 @@ export class IfNode extends ASTNode {
 
     public evaluate(env: Environment, succeed: Continuation, fail: Continuation): void {
         const succeed2: Continuation = (value: Value): void => {
-            if (!(value instanceof BooleanValue) || (value.data !== false))
+            if (value.isTrue())
                 this.consequent.evaluate(env, succeed, fail);
             else if (this.alternative !== null)
                 this.alternative.evaluate(env, succeed, fail);
             else
-                succeed(new BooleanValue(true));
+                succeed(UnspecifiedValue.instance);
         };
         this.condition.evaluate(env, succeed2, fail);
     }
@@ -294,14 +294,7 @@ export class ApplyNode extends ASTNode {
     }
 
     public evaluateProc(procValue: Value, argList: Value, env: Environment, succeed: Continuation, fail: Continuation): void {
-        const argArray: Value[] = [];
-        while ((argList instanceof PairValue)) {
-            argArray.push(argList.car);
-            argList = argList.cdr;
-        }
-        if (!(argList instanceof NilValue))
-            throw new Error("argList should be nil");
-        argArray.reverse();
+        const argArray = backwardsListToArray(argList);
 
         if (procValue instanceof BuiltinProcedureValue) {
             procValue.proc(argArray, succeed, fail);
@@ -313,23 +306,12 @@ export class ApplyNode extends ASTNode {
             const expectedArgCount = lambdaNode.variables.length;
             const actualArgCount = argArray.length;
             if (actualArgCount !== expectedArgCount) {
-                fail(new StringValue("Incorrect number of arguments; have " + actualArgCount + ", expecetd " +
+                fail(new StringValue("Incorrect number of arguments; have " + actualArgCount + ", expected " +
                     expectedArgCount));
                 return;
             }
 
-            const innerEnv = new Environment(lambdaNode.innerScope, outerEnv);
-            for (let i = 0; i < argArray.length; i++) {
-                if (i >= lambdaNode.variables.length) { // sanity check
-                    throw new Error("Invalid argument number: more than # variables");
-                }
-                if (i >= lambdaNode.innerScope.slots.length) { // sanity check
-                    throw new Error("Invalid argument number: more than # slots");
-                }
-                const variable = innerEnv.getVar(i, lambdaNode.variables[i], lambdaNode.innerScope.slots[i]);
-                variable.value = argArray[i];
-            }
-
+            const innerEnv = bindLambdaArguments(argArray, lambdaNode, outerEnv);
             procValue.proc.body.evaluate(innerEnv, succeed, fail);
         }
         else {
@@ -337,6 +319,21 @@ export class ApplyNode extends ASTNode {
             return;
         }
    }
+}
+
+function bindLambdaArguments(argArray: Value[], lambdaNode: LambdaNode, outerEnv: Environment): Environment {
+    const innerEnv = new Environment(lambdaNode.innerScope, outerEnv);
+    for (let i = 0; i < argArray.length; i++) {
+        if (i >= lambdaNode.variables.length) { // sanity check
+            throw new Error("Invalid argument number: more than # variables");
+        }
+        if (i >= lambdaNode.innerScope.slots.length) { // sanity check
+            throw new Error("Invalid argument number: more than # slots");
+        }
+        const variable = innerEnv.getVar(i, lambdaNode.variables[i], lambdaNode.innerScope.slots[i]);
+        variable.value = argArray[i];
+    }
+    return innerEnv;
 }
 
 export class VariableNode extends ASTNode {
@@ -414,26 +411,33 @@ export class LetrecNode extends ASTNode {
     }
 
     public evalBody(bindingList: Value, innerEnv: Environment, succeed: Continuation, fail: Continuation): void {
-        const bindingArray: Value[] = [];
-        while ((bindingList instanceof PairValue)) {
-            bindingArray.push(bindingList.car);
-            bindingList = bindingList.cdr;
-        }
-        if (!(bindingList instanceof NilValue))
-            throw new Error("bindingList should be nil");
-        bindingArray.reverse();
-
-        for (let i = 0; i < bindingArray.length; i++) {
-            if (i >= this.bindings.length) { // sanity check
-                throw new Error("Invalid argument number: more than # bindings");
-            }
-            if (i >= this.innerScope.slots.length) { // sanity check
-                throw new Error("Invalid argument number: more than # slots");
-            }
-            const variable = innerEnv.getVar(i, this.bindings[i].ref.target.name, this.innerScope.slots[i]);
-            variable.value = bindingArray[i];
-        }
-
+        const bindingArray = backwardsListToArray(bindingList);
+        bindLetrecValues(bindingArray, this, innerEnv);
         this.body.evaluate(innerEnv, succeed, fail);
     }
+}
+
+function bindLetrecValues(values: Value[], letrecNode: LetrecNode, innerEnv: Environment): void {
+    for (let i = 0; i < values.length; i++) {
+        if (i >= letrecNode.bindings.length) { // sanity check
+            throw new Error("Invalid argument number: more than # bindings");
+        }
+        if (i >= letrecNode.innerScope.slots.length) { // sanity check
+            throw new Error("Invalid argument number: more than # slots");
+        }
+        const variable = innerEnv.getVar(i, letrecNode.bindings[i].ref.target.name, letrecNode.innerScope.slots[i]);
+        variable.value = values[i];
+    }
+}
+
+function backwardsListToArray(list: Value): Value[] {
+    const array: Value[] = [];
+    while ((list instanceof PairValue)) {
+        array.push(list.car);
+        list = list.cdr;
+    }
+    if (!(list instanceof NilValue))
+        throw new Error("list should be terminated by nil");
+    array.reverse();
+    return array;
 }

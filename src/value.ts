@@ -26,6 +26,10 @@ export abstract class Value {
         this.print(output, visiting);
         return output.join("");
     }
+
+    public isTrue(): boolean {
+        return true;
+    }
 }
 
 export class BooleanValue extends Value {
@@ -39,6 +43,10 @@ export class BooleanValue extends Value {
 
     public print(output: string[], visiting: Set<Value>): void {
         output.push(this.data ? "#t" : "#f");
+    }
+
+    public isTrue(): boolean {
+        return this.data;
     }
 }
 
