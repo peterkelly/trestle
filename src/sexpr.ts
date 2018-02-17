@@ -88,7 +88,7 @@ export class BooleanExpr extends SExpr {
     }
 
     public build(scope: LexicalScope): ASTNode {
-        return new ConstantNode(this);
+        return new ConstantNode(this.range, this);
     }
 }
 
@@ -110,7 +110,7 @@ export class NumberExpr extends SExpr {
     }
 
     public build(scope: LexicalScope): ASTNode {
-        return new ConstantNode(this);
+        return new ConstantNode(this.range, this);
     }
 }
 
@@ -132,7 +132,7 @@ export class StringExpr extends SExpr {
     }
 
     public build(scope: LexicalScope): ASTNode {
-        return new ConstantNode(this);
+        return new ConstantNode(this.range, this);
     }
 }
 
@@ -157,7 +157,7 @@ export class SymbolExpr extends SExpr {
         const ref = scope.lookup(this.name);
         if (ref === null)
             throw new BuildError(this.range, "symbol not found: " + this.name);
-        return new VariableNode(ref);
+        return new VariableNode(this.range, ref);
     }
 }
 
@@ -180,7 +180,7 @@ export class QuoteExpr extends SExpr {
     }
 
     public build(scope: LexicalScope): ASTNode {
-        return new ConstantNode(this.body);
+        return new ConstantNode(this.range, this.body);
     }
 }
 
@@ -232,12 +232,12 @@ export class PairExpr extends SExpr {
                     const consequent = items[2].build(scope);
                     const alternative = (items.length === 4) ? items[3].build(scope) : null;
 
-                    return new IfNode(condition, consequent, alternative);
+                    return new IfNode(this.range, condition, consequent, alternative);
                 }
                 case "quote": {
                     if (items.length !== 2)
                         throw new BuildError(first.range, "quote requires exactly one argument");
-                    return new ConstantNode(items[2]);
+                    return new ConstantNode(this.range, items[2]);
                 }
                 // case "define": {
                 //     if (items.length !== 3)
@@ -253,7 +253,7 @@ export class PairExpr extends SExpr {
                 //             throw new BuildError(first.range, "define is missing name");
                 //         const defName = allNames[0];
                 //         const paramNames = allNames.slice(1);
-                //         const lambda = buildLambda(scope, paramNames, items[2]);
+                //         const lambda = buildLambda(this.range, scope, paramNames, items[2]);
                 //         return new DefineNode(defName.name, lambda);
                 //     }
                 // }
@@ -269,7 +269,7 @@ export class PairExpr extends SExpr {
 
 
                     const names = getFormalParameterNames(paramsPtr.car);
-                    return buildLambda(scope, names, bodyPtr);
+                    return buildLambda(this.range, scope, names, bodyPtr);
                     // const innerScope = makeInnerScope(scope, names);
                     // const body = items[2].build(innerScope);
                     // return new LambdaNode(names, body);
@@ -284,7 +284,7 @@ export class PairExpr extends SExpr {
                     const ref = scope.lookup(name.name);
                     if (ref === null)
                         throw new BuildError(name.range, "symbol not found: " + name.name);
-                    return new AssignNode(ref, body);
+                    return new AssignNode(this.range, ref, body);
                 }
                 case "begin": {
                     if (!(this.cdr instanceof PairExpr))
@@ -301,7 +301,7 @@ export class PairExpr extends SExpr {
                     const inner = new LexicalScope(scope);
                     const bindings = buildLetrecDefs(inner, varsPtr.car);
                     const body = buildSequenceFromList(inner, bodyPtr);
-                    return new LetrecNode(inner, bindings, body);
+                    return new LetrecNode(this.range, inner, bindings, body);
                 }
                 case "and": {
                     const argsPtr = this.cdr;
@@ -321,7 +321,7 @@ export class PairExpr extends SExpr {
         }
         const proc = first.build(scope);
         const args = items.slice(1).map(a => a.build(scope));
-        return new ApplyNode(proc, args);
+        return new ApplyNode(this.range, proc, args);
         // throw new BuildError(this.range, "Unknown special form");
     }
 }
@@ -330,7 +330,7 @@ function makeAnd(scope: LexicalScope, list: PairExpr): ASTNode {
     if (list.cdr instanceof PairExpr) {
         const first = list.car.build(scope);
         const second = makeAnd(scope, list.cdr);
-        return new AndNode(first, second);
+        return new AndNode(list.range, first, second);
     }
     else if (list.cdr instanceof NilExpr) {
         return list.car.build(scope);
@@ -344,7 +344,7 @@ function makeOr(scope: LexicalScope, list: PairExpr): ASTNode {
     if (list.cdr instanceof PairExpr) {
         const first = list.car.build(scope);
         const second = makeOr(scope, list.cdr);
-        return new OrNode(first, second);
+        return new OrNode(list.range, first, second);
     }
     else if (list.cdr instanceof NilExpr) {
         return list.car.build(scope);
@@ -374,12 +374,19 @@ function buildLetrecDefs(inner: LexicalScope, defsList: SExpr): LetrecBinding[] 
     if (defsArray === null)
         throw new BuildError(defsList.range, "letrec: definitions must be a list");
     const prepared: { ref: LexicalRef, body: SExpr }[] = [];
-    for (const def of defsArray) {
+    console.log("I have " + defsArray.length + " definitions");
+    for (let i = 0; i < defsArray.length; i++) {
+        const def = defsArray[i];
+    // for (const def of defsArray) {
         const defParts = listToArray(def);
-        if (defParts === null)
+        if (defParts === null) {
+            console.log("definition " + i + ": defParts === null");
             throw new BuildError(def.range, "letrec: definition must be a list");
-        if (defParts.length !== 2)
+        }
+        if (defParts.length !== 2) {
+            console.log("definition " + i + ": defParts.length = " + defParts.length);
             throw new BuildError(def.range, "letrec: definition must be a list of two items");
+        }
 
 
         // if (!(def instanceof PairExpr))
@@ -413,17 +420,17 @@ export function buildSequenceFromList(scope: LexicalScope, list: PairExpr): ASTN
     }
     else if (list.cdr instanceof PairExpr) {
         const rest = buildSequenceFromList(scope, list.cdr);
-        return new SequenceNode(first, rest);
+        return new SequenceNode(list.range, first, rest);
     }
     else {
         throw new BuildError(list.cdr.range, "Expected a list");
     }
 }
 
-function buildLambda(scope: LexicalScope, names: SymbolExpr[], body: PairExpr): LambdaNode {
+function buildLambda(range: SourceRange, scope: LexicalScope, names: SymbolExpr[], body: PairExpr): LambdaNode {
     const innerScope = makeInnerScope(scope, names);
     const bodyNode = buildSequenceFromList(innerScope, body);
-    return new LambdaNode(names.map(e => e.name), innerScope, bodyNode);
+    return new LambdaNode(range, names.map(e => e.name), innerScope, bodyNode);
 }
 
 function makeInnerScope(outer: LexicalScope, symbols: SymbolExpr[]): LexicalScope {

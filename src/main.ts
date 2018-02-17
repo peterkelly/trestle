@@ -18,12 +18,23 @@ import { NilExpr, BuildError, buildSequenceFromList } from "./sexpr";
 import { SourceInput, testSourceCoords } from "./source";
 import { LexicalScope } from "./scope";
 import { Environment } from "./runtime";
-import { Value } from "./value";
+import { Value, ErrorValue } from "./value";
 import { BuiltinProcedureValue, builtins } from "./builtins";
 
 // console.log("Hello World");
 // const p = new Parser("(test 1 2 3)");
 // console.log(p);
+
+function showBuildError(e: BuildError, filename: string, input: string): void {
+    const sinput = new SourceInput(input);
+    const startCoords = sinput.coordsFromLocation(e.range.start);
+    const endCoords = sinput.coordsFromLocation(e.range.end);
+    console.log(filename + " (" + startCoords.line + "," + startCoords.col + ")-" +
+        "(" + endCoords.line + "," + endCoords.col + "): " + e.detail);
+    const hltext = sinput.highlightRange(e.range);
+    console.log(hltext);
+    console.log(e.stack);
+}
 
 function main(): void {
     if (process.argv.length < 3) {
@@ -73,20 +84,16 @@ function main(): void {
                 },
                 // failure continuation
                 (value: Value): void => {
-                    console.log("Failure: " + value);
+                    if (value instanceof ErrorValue)
+                        showBuildError(value.error, filename, input);
+                    else
+                        console.log("Failure: " + value);
                 });
         }
     }
     catch (e) {
         if (e instanceof BuildError) {
-            const sinput = new SourceInput(input);
-            const startCoords = sinput.coordsFromLocation(e.range.start);
-            const endCoords = sinput.coordsFromLocation(e.range.end);
-            console.log(filename + " (" + startCoords.line + "," + startCoords.col + ")-" +
-                "(" + endCoords.line + "," + endCoords.col + "): " + e.detail);
-            const hltext = sinput.highlightRange(e.range);
-            console.log(hltext);
-            console.log(e.stack);
+            showBuildError(e, filename, input);
         }
         else {
             throw e;

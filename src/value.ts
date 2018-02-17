@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { BuildError } from "./sexpr";
+
 export abstract class Value {
     public _class_Value: any;
 
@@ -215,4 +217,18 @@ export class UnspecifiedValue extends Value {
     }
 
     public static instance = new UnspecifiedValue();
+}
+
+export class ErrorValue extends Value {
+    public _class_ErrorValue: any;
+    public error: BuildError;
+
+    public constructor(error: BuildError) {
+        super();
+        this.error = error;
+    }
+
+    public print(output: string[], visiting: Set<Value>): void {
+        output.push("[error " + JSON.stringify(this.error.detail) + "]");
+    }
 }

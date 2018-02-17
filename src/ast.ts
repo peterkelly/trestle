@@ -12,16 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { SExpr } from "./sexpr";
+import { SExpr, BuildError } from "./sexpr";
+import { SourceRange } from "./source";
 import { LexicalRef, LexicalScope } from "./scope";
-import { Value, StringValue, PairValue, NilValue, UnspecifiedValue } from "./value";
+import { Value, ErrorValue, PairValue, NilValue, UnspecifiedValue } from "./value";
 import { Environment, Continuation } from "./runtime";
 import { BuiltinProcedureValue } from "./builtins";
 
 export abstract class ASTNode {
     public _class_ASTNode: any;
+    public range: SourceRange;
 
-    public constructor() {
+    public constructor(range: SourceRange) {
+        this.range = range;
     }
 
     public abstract dump(indent: string): void;
@@ -34,8 +37,8 @@ export abstract class ASTNode {
 export class ConstantNode extends ASTNode {
     public _class_ConstantNode: any;
     public value: SExpr;
-    public constructor(value: SExpr) {
-        super();
+    public constructor(range: SourceRange, value: SExpr) {
+        super(range);
         this.value = value;
     }
 
@@ -54,8 +57,8 @@ export class TryNode extends ASTNode {
     public tryBody: ASTNode;
     public catchBody: ASTNode;
 
-    public constructor(tryBody: ASTNode, catchBody: ASTNode) {
-        super();
+    public constructor(range: SourceRange, tryBody: ASTNode, catchBody: ASTNode) {
+        super(range);
         this.tryBody = tryBody;
         this.catchBody = catchBody;
     }
@@ -86,8 +89,8 @@ export class ThrowNode extends ASTNode {
     public _class_ThrowNode: any;
     public body: ASTNode;
 
-    public constructor(body: ASTNode) {
-        super();
+    public constructor(range: SourceRange, body: ASTNode) {
+        super(range);
         this.body = body;
     }
 
@@ -117,8 +120,8 @@ export class AssignNode extends ASTNode {
     public _class_AssignNode: any;
     public ref: LexicalRef;
     public body: ASTNode;
-    public constructor(ref: LexicalRef, body: ASTNode) {
-        super();
+    public constructor(range: SourceRange, ref: LexicalRef, body: ASTNode) {
+        super(range);
         this.ref = ref;
         this.body = body;
     }
@@ -134,8 +137,8 @@ export class DefineNode extends ASTNode {
     public name: string;
     public body: ASTNode;
 
-    public constructor(name: string, body: ASTNode) {
-        super();
+    public constructor(range: SourceRange, name: string, body: ASTNode) {
+        super(range);
         this.name = name;
         this.body = body;
     }
@@ -150,11 +153,12 @@ export class IfNode extends ASTNode {
     public _class_IfNode: any;
 
     public constructor(
+        range: SourceRange,
         public condition: ASTNode,
         public consequent: ASTNode,
         public alternative: ASTNode | null
     ) {
-        super();
+        super(range);
     }
 
     public dump(indent: string): void {
@@ -183,8 +187,8 @@ export class AndNode extends ASTNode {
     public first: ASTNode;
     public second: ASTNode;
 
-    public constructor(first: ASTNode, second: ASTNode) {
-        super();
+    public constructor(range: SourceRange, first: ASTNode, second: ASTNode) {
+        super(range);
         this.first = first;
         this.second = second;
     }
@@ -212,8 +216,8 @@ export class OrNode extends ASTNode {
     public first: ASTNode;
     public second: ASTNode;
 
-    public constructor(first: ASTNode, second: ASTNode) {
-        super();
+    public constructor(range: SourceRange, first: ASTNode, second: ASTNode) {
+        super(range);
         this.first = first;
         this.second = second;
     }
@@ -258,8 +262,8 @@ export class LambdaNode extends ASTNode {
     public readonly innerScope: LexicalScope;
     public readonly body: ASTNode;
 
-    public constructor(variables: string[], innerScope: LexicalScope, body: ASTNode) {
-        super();
+    public constructor(range: SourceRange, variables: string[], innerScope: LexicalScope, body: ASTNode) {
+        super(range);
         this.variables = variables;
         this.innerScope = innerScope;
         this.body = body;
@@ -280,8 +284,8 @@ export class SequenceNode extends ASTNode {
     public body: ASTNode;
     public next: ASTNode;
 
-    public constructor(body: ASTNode, next: ASTNode) {
-        super();
+    public constructor(range: SourceRange, body: ASTNode, next: ASTNode) {
+        super(range);
         this.body = body;
         this.next = next;
     }
@@ -316,8 +320,8 @@ export class ApplyNode extends ASTNode {
     public proc: ASTNode;
     public args: ASTNode[];
 
-    public constructor(proc: ASTNode, args: ASTNode[]) {
-        super();
+    public constructor(range: SourceRange, proc: ASTNode, args: ASTNode[]) {
+        super(range);
         this.proc = proc;
         this.args = args;
     }
@@ -364,8 +368,9 @@ export class ApplyNode extends ASTNode {
             const expectedArgCount = lambdaNode.variables.length;
             const actualArgCount = argArray.length;
             if (actualArgCount !== expectedArgCount) {
-                fail(new StringValue("Incorrect number of arguments; have " + actualArgCount + ", expected " +
-                    expectedArgCount));
+                const msg = "Incorrect number of arguments; have " + actualArgCount + ", expected " + expectedArgCount;
+                const error = new BuildError(this.range, msg);
+                fail(new ErrorValue(error));
                 return;
             }
 
@@ -373,7 +378,9 @@ export class ApplyNode extends ASTNode {
             procValue.proc.body.evaluate(innerEnv, succeed, fail);
         }
         else {
-            fail(new StringValue("Cannot apply " + procValue));
+            const msg = "Cannot apply " + procValue;
+            const error = new BuildError(this.range, msg);
+            fail(new ErrorValue(error));
             return;
         }
    }
@@ -398,8 +405,8 @@ export class VariableNode extends ASTNode {
     public _class_VariableNode: any;
     public ref: LexicalRef;
 
-    public constructor(ref: LexicalRef) {
-        super();
+    public constructor(range: SourceRange, ref: LexicalRef) {
+        super(range);
         this.ref = ref;
     }
 
@@ -411,7 +418,9 @@ export class VariableNode extends ASTNode {
         let curDepth = 0;
         while (curDepth < this.ref.depth) {
             if (env.outer === null) {
-                fail(new StringValue("ref depth exhausted; current " + curDepth + " wanted " + this.ref.depth));
+                const msg = "ref depth exhausted; current " + curDepth + " wanted " + this.ref.depth;
+                const error = new BuildError(this.range, msg);
+                fail(new ErrorValue(error));
                 return;
             }
             env = env.outer;
@@ -433,8 +442,8 @@ export class LetrecNode extends ASTNode {
     public bindings: LetrecBinding[];
     public body: ASTNode;
 
-    public constructor(innerScope: LexicalScope, bindings: LetrecBinding[], body: ASTNode) {
-        super();
+    public constructor(range: SourceRange, innerScope: LexicalScope, bindings: LetrecBinding[], body: ASTNode) {
+        super(range);
         this.innerScope = innerScope;
         this.bindings = bindings;
         this.body = body;
