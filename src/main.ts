@@ -14,7 +14,7 @@
 
 import * as fs from "fs";
 import { Parser } from "./parse";
-import { NilExpr, BuildError, buildSequenceFromList } from "./sexpr";
+import { SExpr, PairExpr, NilExpr, BuildError, buildSequenceFromList } from "./sexpr";
 import { SourceInput, testSourceCoords } from "./source";
 import { LexicalScope } from "./scope";
 import { Environment } from "./runtime";
@@ -36,18 +36,74 @@ function showBuildError(e: BuildError, filename: string, input: string): void {
     console.log(e.stack);
 }
 
-function main(): void {
-    if (process.argv.length < 3) {
-        console.error("Please specify filename");
-        process.exit(1);
+interface Options {
+    testCoordsOnly: boolean;
+    prettyPrintOnly: boolean;
+    filename: string | null;
+}
+
+function parseCommandLineOptions(args: string[]): Options {
+    const options: Options = {
+        testCoordsOnly: false,
+        prettyPrintOnly: false,
+        filename: null,
+    };
+
+    for (let argno = 0; argno < args.length; argno++) {
+        if (args[argno] === "--test") {
+            options.testCoordsOnly = true;
+        }
+        else if (args[argno] === "--pretty-print") {
+            options.prettyPrintOnly = true;
+        }
+        else if (options.filename === null) {
+            options.filename = args[argno];
+        }
+        else {
+            console.error("Unknown option: " + args[argno]);
+            process.exit(1);
+        }
     }
 
-    if ((process.argv.length >= 3) && (process.argv[2] === "--test")) {
+    return options;
+}
+
+function main(): void {
+    // let prettyPrintOnly = false;
+    // let filename: string | null = null;
+
+    // for (let argno = 2; argno < process.argv.length; argno++) {
+    //     if (process.argv[argno] === "--test") {
+    //         testSourceCoords();
+    //         process.exit(0);
+    //     }
+    //     else if (process.argv[argno] === "--pretty-print") {
+    //         prettyPrintOnly = true;
+    //     }
+    //     else if (filename === null) {
+    //         filename = process.argv[argno];
+    //     }
+    //     else {
+    //         console.error("Unknown option: " + process.argv[argno]);
+    //         process.exit(1);
+    //     }
+    // }
+
+    const options = parseCommandLineOptions(process.argv.slice(2));
+    if (options.testCoordsOnly) {
         testSourceCoords();
         process.exit(0);
+        return;
     }
 
-    const filename = process.argv[2];
+    const filename = options.filename;
+    if (filename === null) {
+        console.error("Please specify filename");
+        process.exit(1);
+        return;
+    }
+
+    // const filename = process.argv[2];
     const input = fs.readFileSync(filename, { encoding: "utf-8" });
     const p = new Parser(input);
 
@@ -57,6 +113,19 @@ function main(): void {
             toplevelScope.addOwnSlot(name);
         }
         const itemList = p.parseTopLevel();
+
+        if (options.prettyPrintOnly) {
+            let ptr: SExpr = itemList;
+            while (ptr instanceof PairExpr) {
+                const output: string[] = [];
+                ptr.car.checkForSpecialForms();
+                ptr.car.prettyPrint(output, "");
+                console.log(output.join(""));
+                ptr = ptr.cdr;
+            }
+            process.exit(0);
+        }
+
         if (!(itemList instanceof NilExpr)) {
             itemList.dump("");
             const built = buildSequenceFromList(toplevelScope, itemList);

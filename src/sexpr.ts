@@ -58,6 +58,7 @@ export class BuildError extends Error {
 export abstract class SExpr {
     public _class_SExpr: any;
     public range: SourceRange;
+    public containsSpecialForm = false;
 
     public constructor(range: SourceRange) {
         this.range = range;
@@ -65,7 +66,11 @@ export abstract class SExpr {
 
     public abstract toValue(): Value;
 
+    public abstract checkForSpecialForms(): boolean;
+
     public abstract dump(indent: string): void;
+
+    public abstract prettyPrint(output: string[], indent: string): void;
 
     public abstract build(scope: LexicalScope): ASTNode;
 }
@@ -83,8 +88,19 @@ export class BooleanExpr extends SExpr {
         return new BooleanValue(this.value);
     }
 
+    public checkForSpecialForms(): boolean {
+        return false;
+    }
+
     public dump(indent: string): void {
         console.log(indent + "BOOLEAN " + this.value);
+    }
+
+    public prettyPrint(output: string[], indent: string): void {
+        if (this.value)
+            output.push("#t");
+        else
+            output.push("#f");
     }
 
     public build(scope: LexicalScope): ASTNode {
@@ -105,8 +121,16 @@ export class NumberExpr extends SExpr {
         return new NumberValue(this.value);
     }
 
+    public checkForSpecialForms(): boolean {
+        return false;
+    }
+
     public dump(indent: string): void {
         console.log(indent + "NUMBER " + this.value);
+    }
+
+    public prettyPrint(output: string[], indent: string): void {
+        output.push("" + this.value);
     }
 
     public build(scope: LexicalScope): ASTNode {
@@ -123,12 +147,20 @@ export class StringExpr extends SExpr {
         this.value = value;
     }
 
+    public checkForSpecialForms(): boolean {
+        return false;
+    }
+
     public toValue(): Value {
         return new StringValue(this.value);
     }
 
     public dump(indent: string): void {
         console.log(indent + "STRING " + JSON.stringify(this.value));
+    }
+
+    public prettyPrint(output: string[], indent: string): void {
+        output.push(JSON.stringify(this.value));
     }
 
     public build(scope: LexicalScope): ASTNode {
@@ -145,12 +177,20 @@ export class SymbolExpr extends SExpr {
         this.name = name;
     }
 
+    public checkForSpecialForms(): boolean {
+        return false;
+    }
+
     public toValue(): Value {
         return new SymbolValue(this.name);
     }
 
     public dump(indent: string): void {
         console.log(indent + "SYMBOL " + this.name);
+    }
+
+    public prettyPrint(output: string[], indent: string): void {
+        output.push(this.name);
     }
 
     public build(scope: LexicalScope): ASTNode {
@@ -170,6 +210,11 @@ export class QuoteExpr extends SExpr {
         this.body = body;
     }
 
+    public checkForSpecialForms(): boolean {
+        this.containsSpecialForm = this.body.checkForSpecialForms();
+        return this.containsSpecialForm;
+    }
+
     public toValue(): Value {
         return new PairValue(new SymbolValue("quote"), this.body.toValue());
     }
@@ -177,6 +222,12 @@ export class QuoteExpr extends SExpr {
     public dump(indent: string): void {
         console.log(indent + "QUOTE");
         this.body.dump(indent + "    ");
+    }
+
+    public prettyPrint(output: string[], indent: string): void {
+        output.push("(quote ");
+        this.body.prettyPrint(output, indent + "    ");
+        output.push(")");
     }
 
     public build(scope: LexicalScope): ASTNode {
@@ -188,6 +239,7 @@ export class PairExpr extends SExpr {
     public _class_PairExpr: any;
     public car: SExpr;
     public cdr: SExpr;
+    private firstNewlineIndex = 0;
 
     public constructor(range: SourceRange, car: SExpr, cdr: SExpr) {
         super(range);
@@ -199,10 +251,90 @@ export class PairExpr extends SExpr {
         return new PairValue(this.car.toValue(), this.cdr.toValue());
     }
 
+    public checkForSpecialForms(): boolean {
+        const carHas = this.car.checkForSpecialForms();
+        const cdrHas = this.cdr.checkForSpecialForms();
+        this.containsSpecialForm = carHas || cdrHas;
+
+        if (this.car instanceof SymbolExpr) {
+            const keyword = this.car.name;
+            if ((keyword === "letrec") ||
+                (keyword === "lambda") ||
+                (keyword === "if") ||
+                (keyword === "begin") ||
+                (keyword === "define") ||
+                (keyword === "cond"))
+                this.containsSpecialForm = true;
+
+            if (keyword === "lambda") {
+                this.firstNewlineIndex = 2;
+            }
+            else if (keyword === "if") {
+                this.firstNewlineIndex = 2;
+            }
+        }
+
+        return this.containsSpecialForm;
+    }
+
     public dump(indent: string): void {
         console.log(indent + "PAIR");
         this.car.dump(indent + "    ");
         this.cdr.dump(indent + "    ");
+    }
+
+    public isList(): boolean {
+        let ptr: SExpr = this;
+        while (ptr instanceof PairExpr)
+            ptr = ptr.cdr;
+        return (ptr instanceof NilExpr);
+    }
+
+    public isSimpleList(): boolean {
+        let complex = false;
+        let ptr: SExpr = this;
+        while (ptr instanceof PairExpr) {
+            if (ptr.car instanceof PairExpr)
+                complex = true;
+            ptr = ptr.cdr;
+        }
+        return !complex && (ptr instanceof NilExpr);
+    }
+
+    public prettyPrint(output: string[], indent: string): void {
+        if (this.isList()) {
+            let keyword: string | null = null;
+            if (this.car instanceof SymbolExpr)
+                keyword = this.car.name;
+
+            let pair: SExpr = this;
+            output.push("(");
+            let index = 0;
+            while (pair instanceof PairExpr) {
+                let childIndent = "    ";
+
+                if ((keyword === "letrec") && (index === 1))
+                    childIndent = "";
+
+                pair.car.prettyPrint(output, indent + childIndent);
+                if (pair.cdr instanceof PairExpr) {
+                    if (this.containsSpecialForm && (index + 1 >= this.firstNewlineIndex))
+                        output.push("\n" + indent + "    ");
+                    else
+                        output.push(" ");
+                }
+                pair = pair.cdr;
+                index++;
+            }
+            output.push(")");
+        }
+        else {
+            output.push("(");
+            this.car.prettyPrint(output, indent + "    ");
+            output.push(" . ");
+            this.cdr.prettyPrint(output, indent + "    ");
+            output.push(")");
+        }
     }
 
     public toArray(): SExpr[] {
@@ -468,8 +600,16 @@ export class NilExpr extends SExpr {
         return NilValue.instance;
     }
 
+    public checkForSpecialForms(): boolean {
+        return false;
+    }
+
     public dump(indent: string): void {
         console.log(indent + "NIL");
+    }
+
+    public prettyPrint(output: string[], indent: string): void {
+        output.push("'()");
     }
 
     public build(scope: LexicalScope): ASTNode {
