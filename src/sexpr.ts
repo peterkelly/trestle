@@ -26,6 +26,8 @@ import {
     SequenceNode,
     LetrecBinding,
     LetrecNode,
+    TryNode,
+    ThrowNode,
 } from "./ast";
 import {
     SourceRange,
@@ -446,6 +448,23 @@ export class PairExpr extends SExpr {
                     if (!(argsPtr instanceof PairExpr))
                         throw new BuildError(first.range, "or requires at least one argument");
                     return makeOr(scope, argsPtr);
+                }
+                case "throw": {
+                    if (items.length !== 2)
+                        throw new BuildError(first.range, "throw requires exactly one argument");
+                    const body = items[1].build(scope);
+                    return new ThrowNode(this.range, body);
+                }
+                case "try": {
+                    if (items.length !== 3)
+                        throw new BuildError(first.range, "try requires exactly two arguments");
+                    const tryBody = items[1].build(scope);
+                    const catchBody = items[2].build(scope);
+                    if (!(catchBody instanceof LambdaNode))
+                        throw new BuildError(items[2].range, "catch must be a lambda expression");
+                    if (catchBody.variables.length !== 1)
+                        throw new BuildError(items[2].range, "catch must accept exactly one argument");
+                    return new TryNode(this.range, tryBody, catchBody);
                 }
                 default:
                     break;

@@ -55,9 +55,9 @@ export class ConstantNode extends ASTNode {
 export class TryNode extends ASTNode {
     public _class_TryNode: any;
     public tryBody: ASTNode;
-    public catchBody: ASTNode;
+    public catchBody: LambdaNode;
 
-    public constructor(range: SourceRange, tryBody: ASTNode, catchBody: ASTNode) {
+    public constructor(range: SourceRange, tryBody: ASTNode, catchBody: LambdaNode) {
         super(range);
         this.tryBody = tryBody;
         this.catchBody = catchBody;
@@ -79,8 +79,8 @@ export class TryNode extends ASTNode {
             },
             // failure continuation
             (value: Value): void => {
-                // FIXME: the catch body should be a LambaNode, and we should pass the value to it
-                this.catchBody.evaluate(env, succeed, fail);
+                const proc = new LambdaProcedureValue(env, this.catchBody);
+                ApplyNode.evaluateLambda(proc, [value], this.range, env, succeed, fail);
             });
     }
 }
@@ -362,20 +362,7 @@ export class ApplyNode extends ASTNode {
             procValue.proc(argArray, succeed, fail);
         }
         else if (procValue instanceof LambdaProcedureValue) {
-            const outerEnv = procValue.env;
-            const lambdaNode = procValue.proc;
-
-            const expectedArgCount = lambdaNode.variables.length;
-            const actualArgCount = argArray.length;
-            if (actualArgCount !== expectedArgCount) {
-                const msg = "Incorrect number of arguments; have " + actualArgCount + ", expected " + expectedArgCount;
-                const error = new BuildError(this.range, msg);
-                fail(new ErrorValue(error));
-                return;
-            }
-
-            const innerEnv = bindLambdaArguments(argArray, lambdaNode, outerEnv);
-            procValue.proc.body.evaluate(innerEnv, succeed, fail);
+            ApplyNode.evaluateLambda(procValue, argArray, this.range, env, succeed, fail);
         }
         else {
             const msg = "Cannot apply " + procValue;
@@ -383,7 +370,25 @@ export class ApplyNode extends ASTNode {
             fail(new ErrorValue(error));
             return;
         }
-   }
+    }
+
+    public static evaluateLambda(procValue: LambdaProcedureValue, argArray: Value[], range: SourceRange,
+        env: Environment, succeed: Continuation, fail: Continuation): void {
+        const outerEnv = procValue.env;
+        const lambdaNode = procValue.proc;
+
+        const expectedArgCount = lambdaNode.variables.length;
+        const actualArgCount = argArray.length;
+        if (actualArgCount !== expectedArgCount) {
+            const msg = "Incorrect number of arguments; have " + actualArgCount + ", expected " + expectedArgCount;
+            const error = new BuildError(range, msg);
+            fail(new ErrorValue(error));
+            return;
+        }
+
+        const innerEnv = bindLambdaArguments(argArray, lambdaNode, outerEnv);
+        procValue.proc.body.evaluate(innerEnv, succeed, fail);
+    }
 }
 
 function bindLambdaArguments(argArray: Value[], lambdaNode: LambdaNode, outerEnv: Environment): Environment {
