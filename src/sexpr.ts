@@ -45,6 +45,7 @@ import {
     PairValue,
     NilValue,
 } from "./value";
+import { parseSpecialForm } from "./special-form";
 
 export class BuildError extends Error {
     public readonly range: SourceRange;
@@ -352,128 +353,68 @@ export class PairExpr extends SExpr {
     }
 
     public build(scope: LexicalScope): ASTNode {
+        const form = parseSpecialForm(this);
+        switch (form.kind) {
+            case "if": {
+                const condition = form.condition.build(scope);
+                const consequent = form.consequent.build(scope);
+                const alternative = (form.alternative !== null) ? form.alternative.build(scope) : null;
+                return new IfNode(this.range, condition, consequent, alternative);
+            }
+            case "quote":
+                return new ConstantNode(this.range, form.body);
+            case "lambda": {
+                const names = getFormalParameterNames(form.params);
+                return buildLambda(this.range, scope, names, form.bodyPtr);
+            }
+            // case "define": // TODO
+            //     break;
+            case "set!": {
+                const name = form.name;
+                const body = form.expr.build(scope);
+                const ref = scope.lookup(name.name);
+                if (ref === null)
+                    throw new BuildError(name.range, "symbol not found: " + name.name);
+                return new AssignNode(this.range, ref, body);
+            }
+            case "begin":
+                return buildSequenceFromList(scope, form.bodyList);
+            case "letrec": {
+                const inner = new LexicalScope(scope);
+                const bindings = buildLetrecDefs(inner, form.vars);
+                const body = buildSequenceFromList(inner, form.bodyPtr);
+                return new LetrecNode(this.range, inner, bindings, body);
+            }
+            case "and":
+                return makeAnd(scope, form.argsPtr);
+            case "or":
+                return makeOr(scope, form.argsPtr);
+            case "throw": {
+                const expr = form.expr.build(scope);
+                return new ThrowNode(this.range, expr);
+            }
+            case "try": {
+                const tryBody = form.tryBody.build(scope);
+                const catchBody = form.catchBody.build(scope);
+                if (!(catchBody instanceof LambdaNode))
+                    throw new BuildError(form.catchBody.range, "catch must be a lambda expression");
+                if (catchBody.variables.length !== 1)
+                    throw new BuildError(form.catchBody.range, "catch must accept exactly one argument");
+                return new TryNode(this.range, tryBody, catchBody);
+            }
+            case "apply":
+                break;
+            default:
+                throw new BuildError(this.car.range, "Unknown special form");
+        }
+
         const items = this.toArray();
         if (items.length === 0)
             throw new BuildError(this.range, "Empty list");
         const first = items[0];
-        if (first instanceof SymbolExpr) {
-            switch (first.name) {
-                case "if": {
-                    if ((items.length !== 3) && (items.length !== 4)) {
-                        throw new BuildError(first.range, "if requires two or three arguments");
-                    }
-                    const condition = items[1].build(scope);
-                    const consequent = items[2].build(scope);
-                    const alternative = (items.length === 4) ? items[3].build(scope) : null;
-
-                    return new IfNode(this.range, condition, consequent, alternative);
-                }
-                case "quote": {
-                    if (items.length !== 2)
-                        throw new BuildError(first.range, "quote requires exactly one argument");
-                    return new ConstantNode(this.range, items[2]);
-                }
-                // case "define": {
-                //     if (items.length !== 3)
-                //         throw new Error("define requires exactly two arguments");
-                //     const formals = items[1];
-                //     if (formals instanceof SymbolExpr) {
-                //         const innerScope = makeInnerScope(scope, [formals]);
-                //         const body = items[2].build(innerScope);
-                //         return new DefineNode(formals.name, body);
-                //     } else {
-                //         const allNames = getFormalParameterNames(formals);
-                //         if (allNames.length === 0)
-                //             throw new BuildError(first.range, "define is missing name");
-                //         const defName = allNames[0];
-                //         const paramNames = allNames.slice(1);
-                //         const lambda = buildLambda(this.range, scope, paramNames, items[2]);
-                //         return new DefineNode(defName.name, lambda);
-                //     }
-                // }
-                case "lambda": {
-                    // if (items.length !== 3)
-                    //     throw new BuildError(first.range, "lambda requires exactly two arguments");
-                    const paramsPtr = this.cdr;
-                    if (!(paramsPtr instanceof PairExpr))
-                        throw new BuildError(first.range, "lambda requires at least two arguments");
-                    const bodyPtr = paramsPtr.cdr;
-                    if (!(bodyPtr instanceof PairExpr))
-                        throw new BuildError(first.range, "lambda requires at least two arguments");
-
-
-                    const names = getFormalParameterNames(paramsPtr.car);
-                    return buildLambda(this.range, scope, names, bodyPtr);
-                    // const innerScope = makeInnerScope(scope, names);
-                    // const body = items[2].build(innerScope);
-                    // return new LambdaNode(names, body);
-                }
-                case "set!": {
-                    if (items.length !== 3)
-                        throw new BuildError(first.range, "set! requires exactly two arguments");
-                    const name = items[1];
-                    const body = items[2].build(scope);
-                    if (!(name instanceof SymbolExpr))
-                        throw new BuildError(name.range, "name must be a symbol");
-                    const ref = scope.lookup(name.name);
-                    if (ref === null)
-                        throw new BuildError(name.range, "symbol not found: " + name.name);
-                    return new AssignNode(this.range, ref, body);
-                }
-                case "begin": {
-                    if (!(this.cdr instanceof PairExpr))
-                        throw new BuildError(first.range, "begin requires at least one argument");
-                    return buildSequenceFromList(scope, this.cdr);
-                }
-                case "letrec": {
-                    const varsPtr = this.cdr;
-                    if (!(varsPtr instanceof PairExpr))
-                        throw new BuildError(first.range, "letrec requires at least two arguments");
-                    const bodyPtr = varsPtr.cdr;
-                    if (!(bodyPtr instanceof PairExpr))
-                        throw new BuildError(first.range, "letrec requires at least two arguments");
-                    const inner = new LexicalScope(scope);
-                    const bindings = buildLetrecDefs(inner, varsPtr.car);
-                    const body = buildSequenceFromList(inner, bodyPtr);
-                    return new LetrecNode(this.range, inner, bindings, body);
-                }
-                case "and": {
-                    const argsPtr = this.cdr;
-                    if (!(argsPtr instanceof PairExpr))
-                        throw new BuildError(first.range, "and requires at least one argument");
-                    return makeAnd(scope, argsPtr);
-                }
-                case "or": {
-                    const argsPtr = this.cdr;
-                    if (!(argsPtr instanceof PairExpr))
-                        throw new BuildError(first.range, "or requires at least one argument");
-                    return makeOr(scope, argsPtr);
-                }
-                case "throw": {
-                    if (items.length !== 2)
-                        throw new BuildError(first.range, "throw requires exactly one argument");
-                    const body = items[1].build(scope);
-                    return new ThrowNode(this.range, body);
-                }
-                case "try": {
-                    if (items.length !== 3)
-                        throw new BuildError(first.range, "try requires exactly two arguments");
-                    const tryBody = items[1].build(scope);
-                    const catchBody = items[2].build(scope);
-                    if (!(catchBody instanceof LambdaNode))
-                        throw new BuildError(items[2].range, "catch must be a lambda expression");
-                    if (catchBody.variables.length !== 1)
-                        throw new BuildError(items[2].range, "catch must accept exactly one argument");
-                    return new TryNode(this.range, tryBody, catchBody);
-                }
-                default:
-                    break;
-            }
-        }
         const proc = first.build(scope);
         const args = items.slice(1).map(a => a.build(scope));
         return new ApplyNode(this.range, proc, args);
-        // throw new BuildError(this.range, "Unknown special form");
     }
 }
 
