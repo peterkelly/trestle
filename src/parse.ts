@@ -51,6 +51,7 @@ function isSymbolChar(c: string): boolean {
         case ")":
         case "#":
         case " ":
+        case ";":
         case "\t":
         case "\r":
         case "\n":
@@ -98,9 +99,22 @@ export class Parser {
         }
     }
 
-    public skipWhitespace(): void {
-        while ((this.pos < this.len) && isWhitespaceChar(this.input[this.pos]))
+    public skipRestOfLine(): void {
+        while ((this.pos < this.len) && (this.input[this.pos] !== "\n"))
             this.pos++;
+        if ((this.pos < this.len) && (this.input[this.pos] === "\n"))
+            this.pos++;
+    }
+
+    public skipWhitespace(): void {
+        while (this.pos < this.len) {
+            if (this.input[this.pos] === ";")
+                this.skipRestOfLine();
+            else if (isWhitespaceChar(this.input[this.pos]))
+                this.pos++;
+            else
+                break;
+        }
     }
 
     public parseNumber(): NumberExpr {
