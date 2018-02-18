@@ -69,26 +69,6 @@ function parseCommandLineOptions(args: string[]): Options {
 }
 
 function main(): void {
-    // let prettyPrintOnly = false;
-    // let filename: string | null = null;
-
-    // for (let argno = 2; argno < process.argv.length; argno++) {
-    //     if (process.argv[argno] === "--test") {
-    //         testSourceCoords();
-    //         process.exit(0);
-    //     }
-    //     else if (process.argv[argno] === "--pretty-print") {
-    //         prettyPrintOnly = true;
-    //     }
-    //     else if (filename === null) {
-    //         filename = process.argv[argno];
-    //     }
-    //     else {
-    //         console.error("Unknown option: " + process.argv[argno]);
-    //         process.exit(1);
-    //     }
-    // }
-
     const options = parseCommandLineOptions(process.argv.slice(2));
     if (options.testCoordsOnly) {
         testSourceCoords();

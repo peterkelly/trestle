@@ -277,6 +277,13 @@ function builtin_null_q(args: Value[], succeed: Continuation, fail: Continuation
         succeed(new BooleanValue(args[0] instanceof NilValue));
 }
 
+function builtin_not(args: Value[], succeed: Continuation, fail: Continuation): void {
+    if (args.length !== 1)
+        fail(new StringValue("not requires exactly one argument"));
+    else
+        succeed(new BooleanValue(!args[0].isTrue()));
+}
+
 export const builtins: { [name: string]: BuiltinProcedure } = {
     "+": builtin_add,
     "-": builtin_subtract,
@@ -300,4 +307,5 @@ export const builtins: { [name: string]: BuiltinProcedure } = {
     "number?": builtin_number_q,
     "string?": builtin_string_q,
     "null?": builtin_null_q,
+    "not": builtin_not,
 };
