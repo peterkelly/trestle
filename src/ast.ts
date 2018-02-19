@@ -29,8 +29,8 @@ export abstract class ASTNode {
 
     public abstract dump(indent: string): void;
 
-    public evaluate(env: Environment, succeed: Continuation, fail: Continuation): void {
-        throw new Error((<any> this).constructor.name + ".evaluate() not implemented");
+    public evalCps(env: Environment, succeed: Continuation, fail: Continuation): void {
+        throw new Error((<any> this).constructor.name + ".evalCps() not implemented");
     }
 }
 
@@ -47,7 +47,7 @@ export class ConstantNode extends ASTNode {
         this.value.dump(indent + "    ");
     }
 
-    public evaluate(env: Environment, succeed: Continuation, fail: Continuation): void {
+    public evalCps(env: Environment, succeed: Continuation, fail: Continuation): void {
         succeed(this.value.toValue());
     }
 }
@@ -71,8 +71,8 @@ export class TryNode extends ASTNode {
         this.catchBody.dump(indent + "        ");
     }
 
-    public evaluate(env: Environment, succeed: Continuation, fail: Continuation): void {
-        this.tryBody.evaluate(env,
+    public evalCps(env: Environment, succeed: Continuation, fail: Continuation): void {
+        this.tryBody.evalCps(env,
             // success continuation
             (value: Value): void => {
                 succeed(value);
@@ -99,12 +99,12 @@ export class ThrowNode extends ASTNode {
         this.body.dump(indent + "    ");
     }
 
-    public evaluate(env: Environment, succeed: Continuation, fail: Continuation): void {
+    public evalCps(env: Environment, succeed: Continuation, fail: Continuation): void {
         // If the throw succeeds (the exception expression was evaluated successfully), then we
         // call fail with the computed value.
         // If the throw fails (another exception occurred while trying to evaluate the expression),
         // then we call fail with that exception. Either way, we fail.
-        this.body.evaluate(env, fail, fail);
+        this.body.evalCps(env, fail, fail);
     }
 }
 
@@ -169,16 +169,16 @@ export class IfNode extends ASTNode {
             this.alternative.dump(indent + "    ");
     }
 
-    public evaluate(env: Environment, succeed: Continuation, fail: Continuation): void {
+    public evalCps(env: Environment, succeed: Continuation, fail: Continuation): void {
         const succeed2: Continuation = (value: Value): void => {
             if (value.isTrue())
-                this.consequent.evaluate(env, succeed, fail);
+                this.consequent.evalCps(env, succeed, fail);
             else if (this.alternative !== null)
-                this.alternative.evaluate(env, succeed, fail);
+                this.alternative.evalCps(env, succeed, fail);
             else
                 succeed(UnspecifiedValue.instance);
         };
-        this.condition.evaluate(env, succeed2, fail);
+        this.condition.evalCps(env, succeed2, fail);
     }
 }
 
@@ -199,15 +199,15 @@ export class AndNode extends ASTNode {
         this.second.dump(indent + "    ");
     }
 
-    public evaluate(env: Environment, succeed: Continuation, fail: Continuation): void {
+    public evalCps(env: Environment, succeed: Continuation, fail: Continuation): void {
         const succeed2: Continuation = (value: Value): void => {
             if (!value.isTrue())
                 succeed(value);
             else
-                this.second.evaluate(env, succeed, fail);
+                this.second.evalCps(env, succeed, fail);
         };
 
-        this.first.evaluate(env, succeed2, fail);
+        this.first.evalCps(env, succeed2, fail);
     }
 }
 
@@ -228,15 +228,15 @@ export class OrNode extends ASTNode {
         this.second.dump(indent + "    ");
     }
 
-    public evaluate(env: Environment, succeed: Continuation, fail: Continuation): void {
+    public evalCps(env: Environment, succeed: Continuation, fail: Continuation): void {
         const succeed2: Continuation = (value: Value): void => {
             if (value.isTrue())
                 succeed(value);
             else
-                this.second.evaluate(env, succeed, fail);
+                this.second.evalCps(env, succeed, fail);
         };
 
-        this.first.evaluate(env, succeed2, fail);
+        this.first.evalCps(env, succeed2, fail);
     }
 }
 
@@ -274,7 +274,7 @@ export class LambdaNode extends ASTNode {
         this.body.dump(indent + "    ");
     }
 
-    public evaluate(env: Environment, succeed: Continuation, fail: Continuation): void {
+    public evalCps(env: Environment, succeed: Continuation, fail: Continuation): void {
         succeed(new LambdaProcedureValue(env, this));
     }
 }
@@ -300,11 +300,11 @@ export class SequenceNode extends ASTNode {
         cur.dump(indent + "    ");
     }
 
-    public evaluate(env: Environment, succeed: Continuation, fail: Continuation): void {
+    public evalCps(env: Environment, succeed: Continuation, fail: Continuation): void {
         const succeed2: Continuation = (value: Value): void => {
-            this.next.evaluate(env, succeed, fail);
+            this.next.evalCps(env, succeed, fail);
         };
-        this.body.evaluate(env, succeed2, fail);
+        this.body.evalCps(env, succeed2, fail);
     }
 }
 
@@ -335,27 +335,27 @@ export class ApplyNode extends ASTNode {
         }
     }
 
-    public evaluate(env: Environment, succeed: Continuation, fail: Continuation): void {
+    public evalCps(env: Environment, succeed: Continuation, fail: Continuation): void {
         const succeed2: Continuation = (procValue: Value): void => {
-            this.evaluateArg(procValue, 0, NilValue.instance, env, succeed, fail);
+            this.evalCpsArg(procValue, 0, NilValue.instance, env, succeed, fail);
         };
-        this.proc.evaluate(env, succeed2, fail);
+        this.proc.evalCps(env, succeed2, fail);
     }
 
-    public evaluateArg(procValue: Value, argno: number, prev: Value, env: Environment, succeed: Continuation, fail: Continuation): void {
+    public evalCpsArg(procValue: Value, argno: number, prev: Value, env: Environment, succeed: Continuation, fail: Continuation): void {
         if (argno >= this.args.length) {
-            this.evaluateProc(procValue, prev, env, succeed, fail);
+            this.evalCpsProc(procValue, prev, env, succeed, fail);
             return;
         }
 
         const succeed2: Continuation = (argValue: Value): void => {
             const lst = new PairValue(argValue, prev);
-            this.evaluateArg(procValue, argno + 1, lst, env, succeed, fail);
+            this.evalCpsArg(procValue, argno + 1, lst, env, succeed, fail);
         };
-        this.args[argno].evaluate(env, succeed2, fail);
+        this.args[argno].evalCps(env, succeed2, fail);
     }
 
-    public evaluateProc(procValue: Value, argList: Value, env: Environment, succeed: Continuation, fail: Continuation): void {
+    public evalCpsProc(procValue: Value, argList: Value, env: Environment, succeed: Continuation, fail: Continuation): void {
         const argArray = backwardsListToArray(argList);
 
         if (procValue instanceof BuiltinProcedureValue) {
@@ -387,7 +387,7 @@ export class ApplyNode extends ASTNode {
         }
 
         const innerEnv = bindLambdaArguments(argArray, lambdaNode, outerEnv);
-        procValue.proc.body.evaluate(innerEnv, succeed, fail);
+        procValue.proc.body.evalCps(innerEnv, succeed, fail);
     }
 }
 
@@ -419,7 +419,7 @@ export class VariableNode extends ASTNode {
         console.log(indent + "Variable " + this.ref.target.name + " (" + this.ref.depth + "," + this.ref.index + ")");
     }
 
-    public evaluate(env: Environment, succeed: Continuation, fail: Continuation): void {
+    public evalCps(env: Environment, succeed: Continuation, fail: Continuation): void {
         let curDepth = 0;
         while (curDepth < this.ref.depth) {
             if (env.outer === null) {
@@ -464,28 +464,28 @@ export class LetrecNode extends ASTNode {
         this.body.dump(indent + "        ");
     }
 
-    public evaluate(env: Environment, succeed: Continuation, fail: Continuation): void {
+    public evalCps(env: Environment, succeed: Continuation, fail: Continuation): void {
         const innerEnv = new Environment(this.innerScope, env);
-        this.evalBinding(0, NilValue.instance, innerEnv, succeed, fail);
+        this.evalCpsBinding(0, NilValue.instance, innerEnv, succeed, fail);
     }
 
-    public evalBinding(bindingIndex: number, prev: Value, innerEnv: Environment, succeed: Continuation, fail: Continuation): void {
+    public evalCpsBinding(bindingIndex: number, prev: Value, innerEnv: Environment, succeed: Continuation, fail: Continuation): void {
         if (bindingIndex >= this.bindings.length) {
-            this.evalBody(prev, innerEnv, succeed, fail);
+            this.evalCpsBody(prev, innerEnv, succeed, fail);
             return;
         }
 
         const succeed2: Continuation = (value: Value): void => {
             const lst = new PairValue(value, prev);
-            this.evalBinding(bindingIndex + 1, lst, innerEnv, succeed, fail);
+            this.evalCpsBinding(bindingIndex + 1, lst, innerEnv, succeed, fail);
         };
-        this.bindings[bindingIndex].body.evaluate(innerEnv, succeed2, fail);
+        this.bindings[bindingIndex].body.evalCps(innerEnv, succeed2, fail);
     }
 
-    public evalBody(bindingList: Value, innerEnv: Environment, succeed: Continuation, fail: Continuation): void {
+    public evalCpsBody(bindingList: Value, innerEnv: Environment, succeed: Continuation, fail: Continuation): void {
         const bindingArray = backwardsListToArray(bindingList);
         bindLetrecValues(bindingArray, this, innerEnv);
-        this.body.evaluate(innerEnv, succeed, fail);
+        this.body.evalCps(innerEnv, succeed, fail);
     }
 }
 

@@ -126,7 +126,7 @@ function main(): void {
                 // toplevelScope.addOwnSlot(name);
             }
 
-            built.evaluate(topLevelEnv,
+            built.evalCps(topLevelEnv,
                 // success continuation
                 (value: Value): void => {
                     console.log("Success: " + value);
