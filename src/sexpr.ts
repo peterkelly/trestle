@@ -466,7 +466,7 @@ function buildLetrecDefs(inner: LexicalScope, defsList: SExpr): LetrecBinding[] 
     if (defsArray === null)
         throw new BuildError(defsList.range, "letrec: definitions must be a list");
     const prepared: { ref: LexicalRef, body: SExpr }[] = [];
-    console.log("I have " + defsArray.length + " definitions");
+    // console.log("I have " + defsArray.length + " definitions");
     for (let i = 0; i < defsArray.length; i++) {
         const def = defsArray[i];
     // for (const def of defsArray) {

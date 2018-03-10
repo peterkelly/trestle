@@ -112,10 +112,10 @@ function main(): void {
         }
 
         if (!(itemList instanceof NilExpr)) {
-            itemList.dump("");
+            // itemList.dump("");
             const built = buildSequenceFromList(toplevelScope, itemList);
-            built.dump("");
-            console.log("========================================");
+            // built.dump("");
+            // console.log("========================================");
             const topLevelEnv = new Environment(toplevelScope, null);
 
             for (const name of Object.keys(builtins).sort()) {
