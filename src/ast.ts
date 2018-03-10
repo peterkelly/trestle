@@ -157,6 +157,22 @@ export class AssignNode extends ASTNode {
         console.log(indent + "Assign " + this.ref.target.name + " (" + this.ref.depth + "," + this.ref.index + ")");
         this.body.dump(indent + "    ");
     }
+
+    public evalCps(env: Environment, succeed: Continuation, fail: Continuation): void {
+        const succeed2: Continuation = (value: Value): void => {
+            const variable = env.resolveRef(this.ref, this.range);
+            variable.value = value;
+            succeed(UnspecifiedValue.instance);
+        };
+        this.body.evalCps(env, succeed2, fail);
+    }
+
+    public evalDirect(env: Environment): Value {
+        const value = this.body.evalDirect(env);
+        const variable = env.resolveRef(this.ref, this.range);
+        variable.value = value;
+        return UnspecifiedValue.instance;
+    }
 }
 
 export class DefineNode extends ASTNode {
@@ -530,17 +546,7 @@ export class VariableNode extends ASTNode {
     }
 
     public evalDirect(env: Environment): Value {
-        let curDepth = 0;
-        while (curDepth < this.ref.depth) {
-            if (env.outer === null) {
-                const msg = "ref depth exhausted; current " + curDepth + " wanted " + this.ref.depth;
-                const error = new BuildError(this.range, msg);
-                throw new SchemeException(new ErrorValue(error));
-            }
-            env = env.outer;
-            curDepth++;
-        }
-        const variable = env.getVar(this.ref.index, this.ref.name, this.ref.target);
+        const variable = env.resolveRef(this.ref, this.range);
         return variable.value;
     }
 }

@@ -13,7 +13,10 @@
 // limitations under the License.
 
 import { Value, NilValue } from "./value";
-import { LexicalSlot, LexicalScope } from "./scope";
+import { LexicalSlot, LexicalScope, LexicalRef } from "./scope";
+import { BuildError } from "./sexpr";
+import { ErrorValue } from "./value";
+import { SourceRange } from "./source";
 
 export type Continuation = (value: Value) => void;
 
@@ -65,6 +68,21 @@ export class Environment {
         if (variable.slot !== slot)
             throw new Error("getVar " + name + ": slot mismatch");
         return variable;
+    }
+
+    public resolveRef(ref: LexicalRef, range: SourceRange): Variable {
+        let env: Environment | null = this;
+        let curDepth = 0;
+        while (curDepth < ref.depth) {
+            if (env.outer === null) {
+                const msg = "ref depth exhausted; current " + curDepth + " wanted " + ref.depth;
+                const error = new BuildError(range, msg);
+                throw new SchemeException(new ErrorValue(error));
+            }
+            env = env.outer;
+            curDepth++;
+        }
+        return env.getVar(ref.index, ref.name, ref.target);
     }
 }
 
