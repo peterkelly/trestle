@@ -17,7 +17,7 @@ import { Parser } from "./parse";
 import { SExpr, PairExpr, NilExpr, BuildError, buildSequenceFromList } from "./sexpr";
 import { SourceInput, testSourceCoords } from "./source";
 import { LexicalScope } from "./scope";
-import { Environment } from "./runtime";
+import { Environment, SchemeException } from "./runtime";
 import { Value, ErrorValue } from "./value";
 import { BuiltinProcedureValue, builtins } from "./builtins";
 
@@ -40,6 +40,7 @@ interface Options {
     testCoordsOnly: boolean;
     prettyPrintOnly: boolean;
     filename: string | null;
+    direct: boolean;
 }
 
 function parseCommandLineOptions(args: string[]): Options {
@@ -47,6 +48,7 @@ function parseCommandLineOptions(args: string[]): Options {
         testCoordsOnly: false,
         prettyPrintOnly: false,
         filename: null,
+        direct: false,
     };
 
     for (let argno = 0; argno < args.length; argno++) {
@@ -55,6 +57,9 @@ function parseCommandLineOptions(args: string[]): Options {
         }
         else if (args[argno] === "--pretty-print") {
             options.prettyPrintOnly = true;
+        }
+        else if (args[argno] === "--direct") {
+            options.direct = true;
         }
         else if (options.filename === null) {
             options.filename = args[argno];
@@ -126,18 +131,37 @@ function main(): void {
                 // toplevelScope.addOwnSlot(name);
             }
 
-            built.evalCps(topLevelEnv,
-                // success continuation
-                (value: Value): void => {
-                    console.log("Success: " + value);
-                },
-                // failure continuation
-                (value: Value): void => {
-                    if (value instanceof ErrorValue)
-                        showBuildError(value.error, filename, input);
-                    else
-                        console.log("Failure: " + value);
-                });
+            if (options.direct) {
+                try {
+                    const value = built.evalDirect(topLevelEnv);
+                    console.log("DIRECT Success: " + value);
+                }
+                catch (e) {
+                    if (e instanceof SchemeException) {
+                        if (e.value instanceof ErrorValue)
+                            showBuildError(e.value.error, filename, input);
+                        else
+                            console.log("DIRECT Failure: " + e.value);
+                    }
+                    else {
+                        console.error(e);
+                    }
+                }
+            }
+            else {
+                built.evalCps(topLevelEnv,
+                    // success continuation
+                    (value: Value): void => {
+                        console.log("CPS Success: " + value);
+                    },
+                    // failure continuation
+                    (value: Value): void => {
+                        if (value instanceof ErrorValue)
+                            showBuildError(value.error, filename, input);
+                        else
+                            console.log("CPS Failure: " + value);
+                    });
+            }
         }
     }
     catch (e) {

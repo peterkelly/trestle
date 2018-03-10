@@ -67,3 +67,12 @@ export class Environment {
         return variable;
     }
 }
+
+export class SchemeException {
+    public _class_SchemeException: any;
+    public value: Value;
+
+    public constructor(value: Value) {
+        this.value = value;
+    }
+}

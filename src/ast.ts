@@ -16,7 +16,7 @@ import { SExpr, BuildError } from "./sexpr";
 import { SourceRange } from "./source";
 import { LexicalRef, LexicalScope } from "./scope";
 import { Value, ErrorValue, PairValue, NilValue, UnspecifiedValue } from "./value";
-import { Environment, Continuation } from "./runtime";
+import { Environment, Continuation, SchemeException } from "./runtime";
 import { BuiltinProcedureValue } from "./builtins";
 
 export abstract class ASTNode {
@@ -31,6 +31,10 @@ export abstract class ASTNode {
 
     public evalCps(env: Environment, succeed: Continuation, fail: Continuation): void {
         throw new Error((<any> this).constructor.name + ".evalCps() not implemented");
+    }
+
+    public evalDirect(env: Environment): Value {
+        throw new Error((<any> this).constructor.name + ".evalDirect() not implemented");
     }
 }
 
@@ -49,6 +53,10 @@ export class ConstantNode extends ASTNode {
 
     public evalCps(env: Environment, succeed: Continuation, fail: Continuation): void {
         succeed(this.value.toValue());
+    }
+
+    public evalDirect(env: Environment): Value {
+        return this.value.toValue();
     }
 }
 
@@ -83,6 +91,20 @@ export class TryNode extends ASTNode {
                 ApplyNode.evaluateLambda(proc, [value], this.range, env, succeed, fail);
             });
     }
+
+    public evalDirect(env: Environment): Value {
+        try {
+            return this.tryBody.evalDirect(env);
+        }
+        catch (e) {
+            // if (e instanceof SchemeException) {
+            //     // TODO
+            // }
+            // else {
+                throw e;
+            // }
+        }
+    }
 }
 
 export class ThrowNode extends ASTNode {
@@ -105,6 +127,11 @@ export class ThrowNode extends ASTNode {
         // If the throw fails (another exception occurred while trying to evaluate the expression),
         // then we call fail with that exception. Either way, we fail.
         this.body.evalCps(env, fail, fail);
+    }
+
+    public evalDirect(env: Environment): Value {
+        const value = this.body.evalDirect(env);
+        throw new SchemeException(value);
     }
 }
 
@@ -180,6 +207,16 @@ export class IfNode extends ASTNode {
         };
         this.condition.evalCps(env, succeed2, fail);
     }
+
+    public evalDirect(env: Environment): Value {
+        const condValue = this.condition.evalDirect(env);
+        if (condValue.isTrue())
+            return this.consequent.evalDirect(env);
+        else if (this.alternative !== null)
+            return this.alternative.evalDirect(env);
+        else
+            return UnspecifiedValue.instance;
+    }
 }
 
 export class AndNode extends ASTNode {
@@ -209,6 +246,13 @@ export class AndNode extends ASTNode {
 
         this.first.evalCps(env, succeed2, fail);
     }
+
+    public evalDirect(env: Environment): Value {
+        const firstValue = this.first.evalDirect(env);
+        if (!firstValue.isTrue())
+            return firstValue;
+        return this.second.evalDirect(env);
+    }
 }
 
 export class OrNode extends ASTNode {
@@ -237,6 +281,13 @@ export class OrNode extends ASTNode {
         };
 
         this.first.evalCps(env, succeed2, fail);
+    }
+
+    public evalDirect(env: Environment): Value {
+        const firstValue = this.first.evalDirect(env);
+        if (firstValue.isTrue())
+            return firstValue;
+        return this.second.evalDirect(env);
     }
 }
 
@@ -277,6 +328,10 @@ export class LambdaNode extends ASTNode {
     public evalCps(env: Environment, succeed: Continuation, fail: Continuation): void {
         succeed(new LambdaProcedureValue(env, this));
     }
+
+    public evalDirect(env: Environment): Value {
+        return new LambdaProcedureValue(env, this);
+    }
 }
 
 export class SequenceNode extends ASTNode {
@@ -305,6 +360,11 @@ export class SequenceNode extends ASTNode {
             this.next.evalCps(env, succeed, fail);
         };
         this.body.evalCps(env, succeed2, fail);
+    }
+
+    public evalDirect(env: Environment): Value {
+        this.body.evalDirect(env);
+        return this.next.evalDirect(env);
     }
 }
 
@@ -389,6 +449,44 @@ export class ApplyNode extends ASTNode {
         const innerEnv = bindLambdaArguments(argArray, lambdaNode, outerEnv);
         procValue.proc.body.evalCps(innerEnv, succeed, fail);
     }
+
+    public evalDirect(env: Environment): Value {
+        const procValue: Value = this.proc.evalDirect(env);
+        const argArray: Value[] = [];
+        for (let i = 0; i < this.args.length; i++) {
+            const arg = this.args[i];
+            argArray.push(arg.evalDirect(env));
+        }
+
+        if (procValue instanceof BuiltinProcedureValue) {
+            return procValue.direct(argArray);
+        }
+        else if (procValue instanceof LambdaProcedureValue) {
+            return ApplyNode.evalLambdaDirect(procValue, argArray, this.range, env);
+        }
+        else {
+            const msg = "Cannot apply " + procValue;
+            const error = new BuildError(this.range, msg);
+            throw new SchemeException(new ErrorValue(error));
+        }
+    }
+
+    public static evalLambdaDirect(procValue: LambdaProcedureValue, argArray: Value[], range: SourceRange,
+        env: Environment): Value {
+        const outerEnv = procValue.env;
+        const lambdaNode = procValue.proc;
+
+        const expectedArgCount = lambdaNode.variables.length;
+        const actualArgCount = argArray.length;
+        if (actualArgCount !== expectedArgCount) {
+            const msg = "Incorrect number of arguments; have " + actualArgCount + ", expected " + expectedArgCount;
+            const error = new BuildError(range, msg);
+            throw new SchemeException(new ErrorValue(error));
+        }
+
+        const innerEnv = bindLambdaArguments(argArray, lambdaNode, outerEnv);
+        return procValue.proc.body.evalDirect(innerEnv);
+    }
 }
 
 function bindLambdaArguments(argArray: Value[], lambdaNode: LambdaNode, outerEnv: Environment): Environment {
@@ -420,19 +518,30 @@ export class VariableNode extends ASTNode {
     }
 
     public evalCps(env: Environment, succeed: Continuation, fail: Continuation): void {
+        try {
+            succeed(this.evalDirect(env));
+        }
+        catch (e) {
+            if (e instanceof SchemeException)
+                fail(e.value);
+            else
+                throw e;
+        }
+    }
+
+    public evalDirect(env: Environment): Value {
         let curDepth = 0;
         while (curDepth < this.ref.depth) {
             if (env.outer === null) {
                 const msg = "ref depth exhausted; current " + curDepth + " wanted " + this.ref.depth;
                 const error = new BuildError(this.range, msg);
-                fail(new ErrorValue(error));
-                return;
+                throw new SchemeException(new ErrorValue(error));
             }
             env = env.outer;
             curDepth++;
         }
         const variable = env.getVar(this.ref.index, this.ref.name, this.ref.target);
-        succeed(variable.value);
+        return variable.value;
     }
 }
 
@@ -486,6 +595,15 @@ export class LetrecNode extends ASTNode {
         const bindingArray = backwardsListToArray(bindingList);
         bindLetrecValues(bindingArray, this, innerEnv);
         this.body.evalCps(innerEnv, succeed, fail);
+    }
+
+    public evalDirect(env: Environment): Value {
+        const innerEnv = new Environment(this.innerScope, env);
+        const bindingArray: Value[] = [];
+        for (const binding of this.bindings)
+            bindingArray.push(binding.body.evalDirect(innerEnv));
+        bindLetrecValues(bindingArray, this, innerEnv);
+        return this.body.evalDirect(innerEnv);
     }
 }
 
