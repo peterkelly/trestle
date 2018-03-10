@@ -29,13 +29,9 @@ export abstract class ASTNode {
 
     public abstract dump(indent: string): void;
 
-    public evalCps(env: Environment, succeed: Continuation, fail: Continuation): void {
-        throw new Error((<any> this).constructor.name + ".evalCps() not implemented");
-    }
+    public abstract evalCps(env: Environment, succeed: Continuation, fail: Continuation): void;
 
-    public evalDirect(env: Environment): Value {
-        throw new Error((<any> this).constructor.name + ".evalDirect() not implemented");
-    }
+    public abstract evalDirect(env: Environment): Value;
 }
 
 export class ConstantNode extends ASTNode {
@@ -135,14 +131,6 @@ export class ThrowNode extends ASTNode {
     }
 }
 
-// export class QuoteNode extends ASTNode {
-//     public _class_QuoteNode: any;
-
-//     public constructor() {
-//         super();
-//     }
-// }
-
 export class AssignNode extends ASTNode {
     public _class_AssignNode: any;
     public ref: LexicalRef;
@@ -172,23 +160,6 @@ export class AssignNode extends ASTNode {
         const variable = env.resolveRef(this.ref, this.range);
         variable.value = value;
         return UnspecifiedValue.instance;
-    }
-}
-
-export class DefineNode extends ASTNode {
-    public _class_DefineNode: any;
-    public name: string;
-    public body: ASTNode;
-
-    public constructor(range: SourceRange, name: string, body: ASTNode) {
-        super(range);
-        this.name = name;
-        this.body = body;
-    }
-
-    public dump(indent: string): void {
-        console.log(indent + "Define " + this.name);
-        this.body.dump(indent + "    ");
     }
 }
 
@@ -383,13 +354,6 @@ export class SequenceNode extends ASTNode {
         return this.next.evalDirect(env);
     }
 }
-
-// export class CondNode extends ASTNode {
-//     public _class_CondNode: any;
-//     public constructor() {
-//         super();
-//     }
-// }
 
 export class ApplyNode extends ASTNode {
     public _class_ApplyNode: any;
