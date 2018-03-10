@@ -172,7 +172,7 @@ export class IfNode extends ASTNode {
         range: SourceRange,
         public condition: ASTNode,
         public consequent: ASTNode,
-        public alternative: ASTNode | null
+        public alternative: ASTNode
     ) {
         super(range);
     }
@@ -189,10 +189,8 @@ export class IfNode extends ASTNode {
         const succeed2: Continuation = (value: Value): void => {
             if (value.isTrue())
                 this.consequent.evalCps(env, succeed, fail);
-            else if (this.alternative !== null)
-                this.alternative.evalCps(env, succeed, fail);
             else
-                succeed(UnspecifiedValue.instance);
+                this.alternative.evalCps(env, succeed, fail);
         };
         this.condition.evalCps(env, succeed2, fail);
     }
@@ -201,82 +199,8 @@ export class IfNode extends ASTNode {
         const condValue = this.condition.evalDirect(env);
         if (condValue.isTrue())
             return this.consequent.evalDirect(env);
-        else if (this.alternative !== null)
-            return this.alternative.evalDirect(env);
         else
-            return UnspecifiedValue.instance;
-    }
-}
-
-export class AndNode extends ASTNode {
-    public _class_OrNode: any;
-    public first: ASTNode;
-    public second: ASTNode;
-
-    public constructor(range: SourceRange, first: ASTNode, second: ASTNode) {
-        super(range);
-        this.first = first;
-        this.second = second;
-    }
-
-    public dump(indent: string): void {
-        console.log(indent + "And");
-        this.first.dump(indent + "    ");
-        this.second.dump(indent + "    ");
-    }
-
-    public evalCps(env: Environment, succeed: Continuation, fail: Continuation): void {
-        const succeed2: Continuation = (value: Value): void => {
-            if (!value.isTrue())
-                succeed(value);
-            else
-                this.second.evalCps(env, succeed, fail);
-        };
-
-        this.first.evalCps(env, succeed2, fail);
-    }
-
-    public evalDirect(env: Environment): Value {
-        const firstValue = this.first.evalDirect(env);
-        if (!firstValue.isTrue())
-            return firstValue;
-        return this.second.evalDirect(env);
-    }
-}
-
-export class OrNode extends ASTNode {
-    public _class_OrNode: any;
-    public first: ASTNode;
-    public second: ASTNode;
-
-    public constructor(range: SourceRange, first: ASTNode, second: ASTNode) {
-        super(range);
-        this.first = first;
-        this.second = second;
-    }
-
-    public dump(indent: string): void {
-        console.log(indent + "Or");
-        this.first.dump(indent + "    ");
-        this.second.dump(indent + "    ");
-    }
-
-    public evalCps(env: Environment, succeed: Continuation, fail: Continuation): void {
-        const succeed2: Continuation = (value: Value): void => {
-            if (value.isTrue())
-                succeed(value);
-            else
-                this.second.evalCps(env, succeed, fail);
-        };
-
-        this.first.evalCps(env, succeed2, fail);
-    }
-
-    public evalDirect(env: Environment): Value {
-        const firstValue = this.first.evalDirect(env);
-        if (firstValue.isTrue())
-            return firstValue;
-        return this.second.evalDirect(env);
+            return this.alternative.evalDirect(env);
     }
 }
 

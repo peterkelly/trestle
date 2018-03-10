@@ -28,7 +28,7 @@ export interface IfForm extends SpecialFormBase {
     kind: "if";
     condition: SExpr;
     consequent: SExpr;
-    alternative: SExpr | null;
+    alternative: SExpr;
 }
 
 export interface QuoteForm extends SpecialFormBase {
@@ -59,16 +59,6 @@ export interface LetrecForm extends SpecialFormBase {
     bodyPtr: PairExpr;
 }
 
-export interface AndForm extends SpecialFormBase {
-    kind: "and";
-    argsPtr: PairExpr;
-}
-
-export interface OrForm extends SpecialFormBase {
-    kind: "or";
-    argsPtr: PairExpr;
-}
-
 export interface ThrowForm extends SpecialFormBase {
     kind: "throw";
     expr: SExpr;
@@ -92,8 +82,6 @@ export type SpecialForm =
     SetForm |
     BeginForm |
     LetrecForm |
-    AndForm |
-    OrForm |
     ThrowForm |
     TryForm |
     ApplyForm;
@@ -106,8 +94,8 @@ export function parseSpecialForm(list: PairExpr): SpecialForm {
     if (first instanceof SymbolExpr) {
         switch (first.name) {
             case "if": {
-                if ((items.length !== 3) && (items.length !== 4))
-                    throw new BuildError(first.range, "if requires two or three arguments");
+                if (items.length !== 4)
+                    throw new BuildError(first.range, "if requires three arguments");
 
                 const result: IfForm = {
                     list: list,
@@ -115,7 +103,7 @@ export function parseSpecialForm(list: PairExpr): SpecialForm {
                     kind: "if",
                     condition: items[1],
                     consequent: items[2],
-                    alternative: (items.length === 4) ? items[3] : null,
+                    alternative: items[3],
                 };
                 return result;
             }
@@ -206,30 +194,6 @@ export function parseSpecialForm(list: PairExpr): SpecialForm {
                     kind: "letrec",
                     vars: varsPtr.car,
                     bodyPtr: bodyPtr,
-                };
-                return result;
-            }
-            case "and": {
-                const argsPtr = list.cdr;
-                if (!(argsPtr instanceof PairExpr))
-                    throw new BuildError(first.range, "and requires at least one argument");
-                const result: AndForm = {
-                    list: list,
-                    keyword: first,
-                    kind: "and",
-                    argsPtr: argsPtr,
-                };
-                return result;
-            }
-            case "or": {
-                const argsPtr = list.cdr;
-                if (!(argsPtr instanceof PairExpr))
-                    throw new BuildError(first.range, "or requires at least one argument");
-                const result: OrForm = {
-                    list: list,
-                    keyword: first,
-                    kind: "or",
-                    argsPtr: argsPtr,
                 };
                 return result;
             }

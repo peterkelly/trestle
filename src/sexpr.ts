@@ -17,8 +17,6 @@ import {
     ConstantNode,
     VariableNode,
     IfNode,
-    AndNode,
-    OrNode,
     // DefineNode,
     LambdaNode,
     ApplyNode,
@@ -44,8 +42,11 @@ import {
     SymbolValue,
     PairValue,
     NilValue,
+    UnspecifiedValue,
 } from "./value";
 import { parseSpecialForm } from "./special-form";
+
+type Transform = (expr: SExpr) => SExpr;
 
 export class BuildError extends Error {
     public readonly range: SourceRange;
@@ -67,6 +68,12 @@ export abstract class SExpr {
         this.range = range;
     }
 
+    public get children(): SExpr[] {
+        return [];
+    }
+
+    public abstract transform(transformer: Transform): SExpr;
+
     public abstract toValue(): Value;
 
     public abstract checkForSpecialForms(): boolean;
@@ -76,6 +83,10 @@ export abstract class SExpr {
     public abstract prettyPrint(output: string[], indent: string): void;
 
     public abstract build(scope: LexicalScope): ASTNode;
+
+    public pair(car: SExpr, cdr: SExpr): PairExpr {
+        return new PairExpr(this.range, car, cdr);
+    }
 }
 
 export class BooleanExpr extends SExpr {
@@ -85,6 +96,10 @@ export class BooleanExpr extends SExpr {
     public constructor(range: SourceRange, value: boolean) {
         super(range);
         this.value = value;
+    }
+
+    public transform(transformer: Transform): SExpr {
+        return this;
     }
 
     public toValue(): Value {
@@ -120,6 +135,10 @@ export class NumberExpr extends SExpr {
         this.value = value;
     }
 
+    public transform(transformer: Transform): SExpr {
+        return this;
+    }
+
     public toValue(): Value {
         return new NumberValue(this.value);
     }
@@ -150,6 +169,10 @@ export class StringExpr extends SExpr {
         this.value = value;
     }
 
+    public transform(transformer: Transform): SExpr {
+        return this;
+    }
+
     public checkForSpecialForms(): boolean {
         return false;
     }
@@ -178,6 +201,10 @@ export class SymbolExpr extends SExpr {
     public constructor(range: SourceRange, name: string) {
         super(range);
         this.name = name;
+    }
+
+    public transform(transformer: Transform): SExpr {
+        return this;
     }
 
     public checkForSpecialForms(): boolean {
@@ -211,6 +238,18 @@ export class QuoteExpr extends SExpr {
     public constructor(range: SourceRange, body: SExpr) {
         super(range);
         this.body = body;
+    }
+
+    public get children(): SExpr[] {
+        return [this.body];
+    }
+
+    public transform(transformer: Transform): SExpr {
+        const newBody = this.body.transform(transformer);
+        if (newBody !== this.body)
+            return new QuoteExpr(this.range, newBody);
+        else
+            return this;
     }
 
     public checkForSpecialForms(): boolean {
@@ -248,6 +287,19 @@ export class PairExpr extends SExpr {
         super(range);
         this.car = car;
         this.cdr = cdr;
+    }
+
+    public transform(transformer: Transform): SExpr {
+        const newCar = this.car.transform(transformer);
+        const newCdr = this.cdr.transform(transformer);
+        if ((newCar !== this.car) || (newCdr !== this.cdr))
+            return transformer(new PairExpr(this.range, newCar, newCdr));
+        else
+            return transformer(this);
+    }
+
+    public get children(): SExpr[] {
+        return [this.car, this.cdr];
     }
 
     public toValue(): Value {
@@ -358,7 +410,7 @@ export class PairExpr extends SExpr {
             case "if": {
                 const condition = form.condition.build(scope);
                 const consequent = form.consequent.build(scope);
-                const alternative = (form.alternative !== null) ? form.alternative.build(scope) : null;
+                const alternative = form.alternative.build(scope);
                 return new IfNode(this.range, condition, consequent, alternative);
             }
             case "quote":
@@ -385,10 +437,6 @@ export class PairExpr extends SExpr {
                 const body = buildSequenceFromList(inner, form.bodyPtr);
                 return new LetrecNode(this.range, inner, bindings, body);
             }
-            case "and":
-                return makeAnd(scope, form.argsPtr);
-            case "or":
-                return makeOr(scope, form.argsPtr);
             case "throw": {
                 const expr = form.expr.build(scope);
                 return new ThrowNode(this.range, expr);
@@ -415,34 +463,6 @@ export class PairExpr extends SExpr {
         const proc = first.build(scope);
         const args = items.slice(1).map(a => a.build(scope));
         return new ApplyNode(this.range, proc, args);
-    }
-}
-
-function makeAnd(scope: LexicalScope, list: PairExpr): ASTNode {
-    if (list.cdr instanceof PairExpr) {
-        const first = list.car.build(scope);
-        const second = makeAnd(scope, list.cdr);
-        return new AndNode(list.range, first, second);
-    }
-    else if (list.cdr instanceof NilExpr) {
-        return list.car.build(scope);
-    }
-    else {
-        throw new BuildError(list.cdr.range, "expected a list");
-    }
-}
-
-function makeOr(scope: LexicalScope, list: PairExpr): ASTNode {
-    if (list.cdr instanceof PairExpr) {
-        const first = list.car.build(scope);
-        const second = makeOr(scope, list.cdr);
-        return new OrNode(list.range, first, second);
-    }
-    else if (list.cdr instanceof NilExpr) {
-        return list.car.build(scope);
-    }
-    else {
-        throw new BuildError(list.cdr.range, "expected a list");
     }
 }
 
@@ -556,6 +576,10 @@ export class NilExpr extends SExpr {
         super(range);
     }
 
+    public transform(transformer: Transform): SExpr {
+        return this;
+    }
+
     public toValue(): Value {
         return NilValue.instance;
     }
@@ -574,5 +598,37 @@ export class NilExpr extends SExpr {
 
     public build(scope: LexicalScope): ASTNode {
         throw new BuildError(this.range, "Unexpected nil");
+    }
+}
+
+export class UnspecifiedExpr extends SExpr {
+    public _class_UnspecifiedExpr: any;
+
+    public constructor(range: SourceRange) {
+        super(range);
+    }
+
+    public transform(transformer: Transform): SExpr {
+        return this;
+    }
+
+    public toValue(): Value {
+        return UnspecifiedValue.instance;
+    }
+
+    public checkForSpecialForms(): boolean {
+        return false;
+    }
+
+    public dump(indent: string): void {
+        console.log(indent + "UNSPECIFIED");
+    }
+
+    public prettyPrint(output: string[], indent: string): void {
+        output.push("*unspecified*");
+    }
+
+    public build(scope: LexicalScope): ASTNode {
+        return new ConstantNode(this.range, this);
     }
 }

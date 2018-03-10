@@ -1,0 +1,18 @@
+(letrec
+    ((sub (lambda (a b cont) (cont (- a b))))
+     (mul (lambda (a b cont) (cont (* a b))))
+     (eq (lambda (a b cont) (cont (== a b))))
+     (fac (lambda (n cont)
+            (eq n 1 (lambda (eq-result)
+                (if eq-result
+                    (cont 1)
+                    (sub n 1 (lambda (sub-result)
+                         (fac sub-result
+                              (lambda (fac-result)
+                                (mul n fac-result cont)))))))))))
+  (fac 5 (lambda (result)
+           (display "result = ")
+           (display result)
+           (newline)
+           (newline)
+           )))

@@ -1,0 +1,13 @@
+(letrec
+    ((sub (lambda (a b) (- a b)))
+     (mul (lambda (a b) (* a b)))
+     (eq (lambda (a b) (== a b)))
+     (fac (lambda (n)
+            (if (eq n 1)
+                1
+                (letrec
+                    ((sub-result (sub n 1)))
+                  (letrec
+                      ((fac-result (fac sub-result)))
+                    (mul n fac-result)))))))
+  (fac 5))

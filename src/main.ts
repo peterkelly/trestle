@@ -20,6 +20,7 @@ import { LexicalScope } from "./scope";
 import { Environment, SchemeException } from "./runtime";
 import { Value, ErrorValue } from "./value";
 import { BuiltinProcedureValue, builtins } from "./builtins";
+import { simplify } from "./simplify";
 
 // console.log("Hello World");
 // const p = new Parser("(test 1 2 3)");
@@ -39,6 +40,7 @@ function showBuildError(e: BuildError, filename: string, input: string): void {
 interface Options {
     testCoordsOnly: boolean;
     prettyPrintOnly: boolean;
+    simplifyOnly: boolean;
     filename: string | null;
     direct: boolean;
 }
@@ -47,6 +49,7 @@ function parseCommandLineOptions(args: string[]): Options {
     const options: Options = {
         testCoordsOnly: false,
         prettyPrintOnly: false,
+        simplifyOnly: false,
         filename: null,
         direct: false,
     };
@@ -57,6 +60,9 @@ function parseCommandLineOptions(args: string[]): Options {
         }
         else if (args[argno] === "--pretty-print") {
             options.prettyPrintOnly = true;
+        }
+        else if (args[argno] === "--simplify") {
+            options.simplifyOnly = true;
         }
         else if (args[argno] === "--direct") {
             options.direct = true;
@@ -71,6 +77,25 @@ function parseCommandLineOptions(args: string[]): Options {
     }
 
     return options;
+}
+
+function simplifyProgram(itemList: PairExpr | NilExpr): void {
+    let ptr: SExpr = itemList;
+    while (ptr instanceof PairExpr) {
+        ptr.car = simplify(ptr.car);
+        ptr = ptr.cdr;
+    }
+}
+
+function prettyPrintProgram(itemList: PairExpr | NilExpr): void {
+    let ptr: SExpr = itemList;
+    while (ptr instanceof PairExpr) {
+        const output: string[] = [];
+        ptr.car.checkForSpecialForms();
+        ptr.car.prettyPrint(output, "");
+        console.log(output.join(""));
+        ptr = ptr.cdr;
+    }
 }
 
 function main(): void {
@@ -100,17 +125,17 @@ function main(): void {
         const itemList = p.parseTopLevel();
 
         if (options.prettyPrintOnly) {
-            let ptr: SExpr = itemList;
-            while (ptr instanceof PairExpr) {
-                const output: string[] = [];
-                ptr.car.checkForSpecialForms();
-                ptr.car.prettyPrint(output, "");
-                console.log(output.join(""));
-                ptr = ptr.cdr;
-            }
+            prettyPrintProgram(itemList);
             process.exit(0);
         }
 
+        if (options.simplifyOnly) {
+            simplifyProgram(itemList);
+            prettyPrintProgram(itemList);
+            process.exit(0);
+        }
+
+        simplifyProgram(itemList);
         if (!(itemList instanceof NilExpr)) {
             // itemList.dump("");
             const built = buildSequenceFromList(toplevelScope, itemList);
