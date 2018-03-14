@@ -55,17 +55,23 @@ function parseCommandLineOptions(args: string[]): Options {
     };
 
     for (let argno = 0; argno < args.length; argno++) {
-        if (args[argno] === "--test") {
-            options.testCoordsOnly = true;
-        }
-        else if (args[argno] === "--pretty-print") {
-            options.prettyPrintOnly = true;
-        }
-        else if (args[argno] === "--simplify") {
-            options.simplifyOnly = true;
-        }
-        else if (args[argno] === "--direct") {
-            options.direct = true;
+        if (args[argno].match(/^--/)) {
+            if (args[argno] === "--test") {
+                options.testCoordsOnly = true;
+            }
+            else if (args[argno] === "--pretty-print") {
+                options.prettyPrintOnly = true;
+            }
+            else if (args[argno] === "--simplify") {
+                options.simplifyOnly = true;
+            }
+            else if (args[argno] === "--direct") {
+                options.direct = true;
+            }
+            else {
+                console.error("Unknown option: " + args[argno]);
+                process.exit(1);
+            }
         }
         else if (options.filename === null) {
             options.filename = args[argno];
