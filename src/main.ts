@@ -37,7 +37,14 @@ function showBuildError(e: BuildError, filename: string, input: string): void {
     console.log(e.stack);
 }
 
+enum EvalKind {
+    None,
+    Direct,
+    CPS,
+}
+
 interface Options {
+    evalKind: EvalKind;
     testCoordsOnly: boolean;
     prettyPrintOnly: boolean;
     simplifyOnly: boolean;
@@ -47,6 +54,7 @@ interface Options {
 
 function parseCommandLineOptions(args: string[]): Options {
     const options: Options = {
+        evalKind: EvalKind.None,
         testCoordsOnly: false,
         prettyPrintOnly: false,
         simplifyOnly: false,
@@ -56,7 +64,13 @@ function parseCommandLineOptions(args: string[]): Options {
 
     for (let argno = 0; argno < args.length; argno++) {
         if (args[argno].match(/^--/)) {
-            if (args[argno] === "--test") {
+            if (args[argno] === "--eval-direct") {
+                options.evalKind = EvalKind.Direct;
+            }
+            else if (args[argno] === "--eval-cps") {
+                options.evalKind = EvalKind.CPS;
+            }
+            else if (args[argno] === "--test") {
                 options.testCoordsOnly = true;
             }
             else if (args[argno] === "--pretty-print") {
@@ -162,7 +176,7 @@ function main(): void {
                 // toplevelScope.addOwnSlot(name);
             }
 
-            if (options.direct) {
+            if (options.evalKind === EvalKind.Direct) {
                 try {
                     const value = built.evalDirect(topLevelEnv);
                     console.log("DIRECT Success: " + value);
@@ -179,7 +193,7 @@ function main(): void {
                     }
                 }
             }
-            else {
+            else if (options.evalKind === EvalKind.CPS) {
                 built.evalCps(topLevelEnv,
                     // success continuation
                     (value: Value): void => {
@@ -192,6 +206,9 @@ function main(): void {
                         else
                             console.log("CPS Failure: " + value);
                     });
+            }
+            else {
+                console.log("Evaluation kind not specified (--eval-direct or --eval-cps)");
             }
         }
     }
