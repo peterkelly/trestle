@@ -49,7 +49,6 @@ interface Options {
     prettyPrintOnly: boolean;
     simplifyOnly: boolean;
     filename: string | null;
-    direct: boolean;
 }
 
 function parseCommandLineOptions(args: string[]): Options {
@@ -59,7 +58,6 @@ function parseCommandLineOptions(args: string[]): Options {
         prettyPrintOnly: false,
         simplifyOnly: false,
         filename: null,
-        direct: false,
     };
 
     for (let argno = 0; argno < args.length; argno++) {
@@ -78,9 +76,6 @@ function parseCommandLineOptions(args: string[]): Options {
             }
             else if (args[argno] === "--simplify") {
                 options.simplifyOnly = true;
-            }
-            else if (args[argno] === "--direct") {
-                options.direct = true;
             }
             else {
                 console.error("Unknown option: " + args[argno]);
