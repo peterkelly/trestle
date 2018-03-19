@@ -84,7 +84,7 @@ export class TryNode extends ASTNode {
             // failure continuation
             (value: Value): void => {
                 const proc = new LambdaProcedureValue(env, this.catchBody);
-                ApplyNode.evalLambdaCps(proc, [value], this.range, env, succeed, fail);
+                ApplyNode.evalLambdaCps(proc, [value], this.range, succeed, fail);
             });
     }
 
@@ -96,7 +96,7 @@ export class TryNode extends ASTNode {
             if (e instanceof SchemeException) {
                 const value = e.value;
                 const proc = new LambdaProcedureValue(env, this.catchBody);
-                return ApplyNode.evalLambdaDirect(proc, [value], this.range, env);
+                return ApplyNode.evalLambdaDirect(proc, [value], this.range);
             }
             else {
                 throw e;
@@ -328,7 +328,7 @@ export class ApplyNode extends ASTNode {
             procValue.proc(argArray, succeed, fail);
         }
         else if (procValue instanceof LambdaProcedureValue) {
-            ApplyNode.evalLambdaCps(procValue, argArray, this.range, env, succeed, fail);
+            ApplyNode.evalLambdaCps(procValue, argArray, this.range, succeed, fail);
         }
         else {
             const msg = "Cannot apply " + procValue;
@@ -339,7 +339,7 @@ export class ApplyNode extends ASTNode {
     }
 
     public static evalLambdaCps(procValue: LambdaProcedureValue, argArray: Value[], range: SourceRange,
-        env: Environment, succeed: Continuation, fail: Continuation): void {
+        succeed: Continuation, fail: Continuation): void {
         const outerEnv = procValue.env;
         const lambdaNode = procValue.proc;
 
@@ -368,7 +368,7 @@ export class ApplyNode extends ASTNode {
             return procValue.direct(argArray);
         }
         else if (procValue instanceof LambdaProcedureValue) {
-            return ApplyNode.evalLambdaDirect(procValue, argArray, this.range, env);
+            return ApplyNode.evalLambdaDirect(procValue, argArray, this.range);
         }
         else {
             const msg = "Cannot apply " + procValue;
@@ -377,8 +377,7 @@ export class ApplyNode extends ASTNode {
         }
     }
 
-    public static evalLambdaDirect(procValue: LambdaProcedureValue, argArray: Value[], range: SourceRange,
-        env: Environment): Value {
+    public static evalLambdaDirect(procValue: LambdaProcedureValue, argArray: Value[], range: SourceRange): Value {
         const outerEnv = procValue.env;
         const lambdaNode = procValue.proc;
 
