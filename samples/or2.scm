@@ -1,1 +1,1 @@
-(or (eqv? 4 4) (eqv? 5 5) (eqv? 6 6))
+(or (eqv? 1 1) (eqv? 2 2))

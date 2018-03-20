@@ -23,6 +23,9 @@ import {
     NilExpr,
     UnspecifiedExpr,
 } from "./sexpr";
+import {
+    gensym,
+} from "./cps-transform";
 
 // '(if ,e1 ,e2) -> '(if ,e1 ,e2 *unspecified*)
 export function simplifyOneArmedIf(root: SExpr): SExpr {
@@ -130,12 +133,13 @@ export function simplifyOr(root: SExpr): SExpr {
             return expr;
         const secondCar = firstCdr.car;
         const secondCdr = firstCdr.cdr;
-        if (!(secondCdr instanceof PairExpr))
-            return expr;
+        if (!(secondCdr instanceof PairExpr)) {
+            return secondCar;
+        }
 
         const range = expr.range;
 
-        const varname = "@x";
+        const varname = gensym();
 
         return simplifyOr(new PairExpr(range,
             new SymbolExpr(range, "letrec"),
