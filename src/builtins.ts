@@ -17,6 +17,7 @@ import {
     NumberValue,
     StringValue,
     SymbolValue,
+    CharValue,
     BooleanValue,
     PairValue,
     NilValue,
@@ -114,7 +115,7 @@ function num_divide(args: number[]): number {
 
 function num_mod(args: number[]): number {
     if (args.length !== 2)
-        throw new Error("% reuqires exactly two arguments");
+        throw new Error("mod reuqires exactly two arguments");
     return args[0] % args[1];
 }
 
@@ -132,10 +133,6 @@ function wrapNumeric(fun: NumericBuiltin): BuiltinDirect {
 }
 
 // export type NumRelationalBuiltin = (a: number, b: number) => boolean;
-
-function num_eq(a: number, b: number): boolean {
-    return (a === b);
-}
 
 function num_ne(a: number, b: number): boolean {
     return (a !== b);
@@ -184,7 +181,6 @@ const builtin_multiply = wrapNumeric(num_multiply);
 const builtin_divide = wrapNumeric(num_divide);
 const builtin_mod = wrapNumeric(num_mod);
 
-const builtin_eq = wrapNumRelational(num_eq);
 const builtin_ne = wrapNumRelational(num_ne);
 const builtin_lt = wrapNumRelational(num_lt);
 const builtin_le = wrapNumRelational(num_le);
@@ -298,13 +294,77 @@ function builtin_succ(args: Value[]): Value {
     return args[0];
 }
 
+function builtin_boolean_eq_q(args: Value[]): Value {
+    if (args.length !== 2)
+        throw new SchemeException(new StringValue("eqv? requires exactly two arguments"));
+    const a = args[0];
+    const b = args[1];
+    if (!(a instanceof BooleanValue))
+        throw new SchemeException(new StringValue("boolean=? requires boolean arguments"));
+    if (!(b instanceof BooleanValue))
+        throw new SchemeException(new StringValue("boolean=? requires boolean arguments"));
+    return new BooleanValue(a.data === b.data);
+}
+
+function builtin_symbol_eq_q(args: Value[]): Value {
+    if (args.length !== 2)
+        throw new SchemeException(new StringValue("eqv? requires exactly two arguments"));
+    const a = args[0];
+    const b = args[1];
+    if (!(a instanceof SymbolValue))
+        throw new SchemeException(new StringValue("symbol=? requires symbol arguments"));
+    if (!(b instanceof SymbolValue))
+        throw new SchemeException(new StringValue("symbol=? requires symbol arguments"));
+    return new BooleanValue(a.data === b.data);
+}
+
+function builtin_number_eq_q(args: Value[]): Value {
+    if (args.length !== 2)
+        throw new SchemeException(new StringValue("= requires exactly two arguments"));
+    const a = args[0];
+    const b = args[1];
+    if (!(a instanceof NumberValue))
+        throw new SchemeException(new StringValue("= requires number arguments"));
+    if (!(b instanceof NumberValue))
+        throw new SchemeException(new StringValue("= requires number arguments"));
+    return new BooleanValue(a.data === b.data);
+}
+
+function builtin_char_eq_q(args: Value[]): Value {
+    if (args.length !== 2)
+        throw new SchemeException(new StringValue("eqv? requires exactly two arguments"));
+    const a = args[0];
+    const b = args[1];
+    if (!(a instanceof CharValue))
+        throw new SchemeException(new StringValue("char=? requires char arguments"));
+    if (!(b instanceof CharValue))
+        throw new SchemeException(new StringValue("char=? requires char arguments"));
+    return new BooleanValue(a.data === b.data);
+}
+
+function builtin_eqv_q(args: Value[]): Value {
+    if (args.length !== 2)
+        throw new SchemeException(new StringValue("eqv? requires exactly two arguments"));
+    if ((args[0] instanceof BooleanValue) && (args[1] instanceof BooleanValue))
+        return builtin_boolean_eq_q(args);
+    if ((args[0] instanceof SymbolValue) && (args[1] instanceof SymbolValue))
+        return builtin_symbol_eq_q(args);
+    if ((args[0] instanceof NumberValue) && (args[1] instanceof NumberValue))
+        return builtin_number_eq_q(args);
+    if ((args[0] instanceof CharValue) && (args[1] instanceof CharValue))
+        return builtin_char_eq_q(args);
+    if ((args[0] instanceof NilValue) && (args[1] instanceof NilValue))
+        return new BooleanValue(true);
+    return new BooleanValue(args[0] === args[1]); // same object
+    // FIXME: record types
+}
+
 export const builtins: { [name: string]: BuiltinDirect } = {
     "+": builtin_add,
     "-": builtin_subtract,
     "*": builtin_multiply,
     "/": builtin_divide,
-    "%": builtin_mod,
-    "==": builtin_eq,
+    "mod": builtin_mod,
     "!=": builtin_ne,
     "<": builtin_lt,
     "<=": builtin_le,
@@ -323,6 +383,11 @@ export const builtins: { [name: string]: BuiltinDirect } = {
     "null?": builtin_null_q,
     "not": builtin_not,
     "SUCC": builtin_succ,
+    "boolean=?": builtin_boolean_eq_q,
+    "symbol=?": builtin_symbol_eq_q,
+    "=": builtin_number_eq_q,
+    "char=?": builtin_char_eq_q,
+    "eqv?": builtin_eqv_q,
 };
 
 export function wrapBuiltinCPS(fun: BuiltinDirect): BuiltinDirect {

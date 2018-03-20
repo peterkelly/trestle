@@ -2,7 +2,7 @@
     ((i 0)
      (loop
       (lambda ()
-        (if (== i 10)
+        (if (eqv? i 10)
             #t
             (begin
               (display "i = ")

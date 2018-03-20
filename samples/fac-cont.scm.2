@@ -1,7 +1,7 @@
 (letrec
     ((sub (lambda (a b cont) (cont (- a b))))
      (mul (lambda (a b cont) (cont (* a b))))
-     (eq (lambda (a b cont) (cont (== a b))))
+     (eq (lambda (a b cont) (cont (eqv? a b))))
      (fac (lambda (n cont)
             (eq n 1 (lambda (eq-result)
                 (if eq-result

@@ -1,15 +1,15 @@
 (letrec
     (
      ;; (even? (lambda (n)
-     ;;          (if (== n 0)
+     ;;          (if (eqv? n 0)
      ;;              #t
      ;;              (not (odd? (- n 1))))))
      ;; (odd? (lambda (n)
-     ;;         (if (== n 1)
+     ;;         (if (eqv? n 1)
      ;;             #t
      ;;             (not (even? (- n 1))))))
-     (even? (lambda (n) (== (% n 2) 0)))
-     (odd? (lambda (n) (== (% n 2) 1)))
+     (even? (lambda (n) (eqv? (mod n 2) 0)))
+     (odd? (lambda (n) (eqv? (mod n 2) 1)))
      (loop
       (lambda (n max)
         (if (> n max)

@@ -1,7 +1,7 @@
 (letrec
     ((sub (lambda (a b cont fail) (cont (- a b) fail)))
      (mul (lambda (a b cont fail) (cont (* a b) fail)))
-     (eq (lambda (a b cont fail) (cont (== a b) fail)))
+     (eq (lambda (a b cont fail) (cont (eqv? a b) fail)))
      (fac (lambda (n cont fail)
             (eq n 1
                 (lambda (eq-result fail)

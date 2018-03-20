@@ -3,11 +3,11 @@
       (lambda (from to)
         (if (<= from to)
             (begin
-              (if (and (== (% from 3) 0) (== (% from 5) 0))
+              (if (and (eqv? (mod from 3) 0) (eqv? (mod from 5) 0))
                   (display "FizzBuzz\n")
-                  (if (== (% from 3) 0)
+                  (if (eqv? (mod from 3) 0)
                       (display "Fizz\n")
-                      (if (== (% from 5) 0)
+                      (if (eqv? (mod from 5) 0)
                           (display "Buzz\n")
                           (begin
                             (display from)

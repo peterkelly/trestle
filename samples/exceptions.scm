@@ -1,7 +1,7 @@
 (letrec
     ((check-number
       (lambda (n)
-        (if (!= (% n 3) 0)
+        (if (!= (mod n 3) 0)
             #t
             (throw "bad!!"))))
      (loop

@@ -1,7 +1,7 @@
 (letrec
     ((sub (lambda (a b) (- a b)))
      (mul (lambda (a b) (* a b)))
-     (eq (lambda (a b) (== a b)))
+     (eq (lambda (a b) (eqv? a b)))
      (fac (lambda (n)
             (if (eq n 1)
                 1
