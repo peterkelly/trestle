@@ -44,7 +44,10 @@ import {
     NilValue,
     UnspecifiedValue,
 } from "./value";
-import { parseSpecialForm } from "./special-form";
+import {
+    parseSpecialForm,
+    LetrecDef,
+} from "./special-form";
 
 type Transform = (expr: SExpr) => SExpr;
 
@@ -433,8 +436,8 @@ export class PairExpr extends SExpr {
                 return buildSequenceFromList(scope, form.bodyList);
             case "letrec": {
                 const inner = new LexicalScope(scope);
-                const bindings = buildLetrecDefs(inner, form.vars);
-                const body = buildSequenceFromList(inner, form.bodyPtr);
+                const bindings = buildLetrecDefs(inner, form.defs);
+                const body = form.body.build(inner);
                 return new LetrecNode(this.range, inner, bindings, body);
             }
             case "throw": {
@@ -466,54 +469,20 @@ export class PairExpr extends SExpr {
     }
 }
 
-function listToArray(list: SExpr): SExpr[] | null {
-    const result: SExpr[] = [];
-    let item = list;
-    while (item instanceof PairExpr) {
-        result.push(item.car);
-        item = item.cdr;
-    }
-    if (!(item instanceof NilExpr))
-        return null;
-        // throw new BuildError(list.range, "listToArray: Expected a list");
-    return result;
-}
-
-function buildLetrecDefs(inner: LexicalScope, defsList: SExpr): LetrecBinding[] {
+function buildLetrecDefs(inner: LexicalScope, defs: LetrecDef[]): LetrecBinding[] {
     const result: LetrecBinding[] = [];
 
-    const defsArray = listToArray(defsList);
-    if (defsArray === null)
-        throw new BuildError(defsList.range, "letrec: definitions must be a list");
     const prepared: { ref: LexicalRef, body: SExpr }[] = [];
-    // console.log("I have " + defsArray.length + " definitions");
-    for (let i = 0; i < defsArray.length; i++) {
-        const def = defsArray[i];
-    // for (const def of defsArray) {
-        const defParts = listToArray(def);
-        if (defParts === null) {
-            console.log("definition " + i + ": defParts === null");
-            throw new BuildError(def.range, "letrec: definition must be a list");
-        }
-        if (defParts.length !== 2) {
-            console.log("definition " + i + ": defParts.length = " + defParts.length);
-            throw new BuildError(def.range, "letrec: definition must be a list of two items");
-        }
-
-
-        // if (!(def instanceof PairExpr))
-        //     throw new BuildError(def.range, "letrec definition must be a pair");
-        const nameExpr = defParts[0];
-        const bodyExpr = defParts[1];
-        if (!(nameExpr instanceof SymbolExpr))
-            throw new BuildError(nameExpr.range, "name must by a symbol");
+    for (let i = 0; i < defs.length; i++) {
+        const def = defs[i];
+        const nameExpr = def.name;
         const name = nameExpr.name;
         if (inner.hasOwnSlot(name))
             throw new BuildError(nameExpr.range, "duplicate variable definition: " + name);
         const ref = inner.addOwnSlot(name);
         prepared.push({
             ref: ref,
-            body: bodyExpr
+            body: def.expr,
         });
     }
 

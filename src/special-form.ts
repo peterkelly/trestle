@@ -16,6 +16,7 @@ import {
     SExpr,
     SymbolExpr,
     PairExpr,
+    NilExpr,
     BuildError,
 } from "./sexpr";
 
@@ -53,10 +54,15 @@ export interface BeginForm extends SpecialFormBase {
     bodyList: PairExpr;
 }
 
+export interface LetrecDef {
+    name: SymbolExpr;
+    expr: SExpr;
+}
+
 export interface LetrecForm extends SpecialFormBase {
     kind: "letrec";
-    vars: SExpr;
-    bodyPtr: PairExpr;
+    defs: LetrecDef[];
+    body: SExpr;
 }
 
 export interface ThrowForm extends SpecialFormBase {
@@ -184,16 +190,46 @@ export function parseSpecialForm(list: PairExpr): SpecialForm {
             case "letrec": {
                 const varsPtr = list.cdr;
                 if (!(varsPtr instanceof PairExpr))
-                    throw new BuildError(first.range, "letrec requires at least two arguments");
+                    throw new BuildError(first.range, "letrec requires exactly two arguments");
                 const bodyPtr = varsPtr.cdr;
                 if (!(bodyPtr instanceof PairExpr))
-                    throw new BuildError(first.range, "letrec requires at least two arguments");
+                    throw new BuildError(first.range, "letrec requires exactly two arguments");
+                if (!(bodyPtr.cdr instanceof NilExpr))
+                    throw new BuildError(first.range, "letrec requires exactly two arguments");
+                const body = bodyPtr.car;
+
+                const defList = varsPtr.car;
+                const defs: LetrecDef[] = [];
+                let defItem: SExpr = defList;
+                while (defItem instanceof PairExpr) {
+                    const item = defItem.car;
+                    if (!(item instanceof PairExpr))
+                        throw new BuildError(item.range, "expected a list of exactly two items");
+                    const firstCar = item.car;
+                    const firstCdr = item.cdr;
+                    if (!(firstCdr instanceof PairExpr))
+                        throw new BuildError(item.range, "expected a list of exactly two items");
+                    const secondCar = firstCdr.car;
+                    const secondCdr = firstCdr.cdr;
+                    if (!(secondCdr instanceof NilExpr))
+                        throw new BuildError(item.range, "expected a list of exactly two items");
+                    if (!(firstCar instanceof SymbolExpr))
+                        throw new BuildError(firstCar.range, "expected a symbol");
+                    defs.push({
+                        name: firstCar,
+                        expr: secondCar,
+                    });
+                    defItem = defItem.cdr;
+                }
+                if (!(defItem instanceof NilExpr))
+                    throw new BuildError(defList.range, "expected a list");
+
                 const result: LetrecForm = {
                     list: list,
                     keyword: first,
                     kind: "letrec",
-                    vars: varsPtr.car,
-                    bodyPtr: bodyPtr,
+                    defs: defs,
+                    body: body,
                 };
                 return result;
             }
