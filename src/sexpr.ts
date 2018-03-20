@@ -48,6 +48,7 @@ import {
     parseSpecialForm,
     LetrecDef,
 } from "./special-form";
+import * as cps from "./cps-transform";
 
 type Transform = (expr: SExpr) => SExpr;
 
@@ -85,6 +86,8 @@ export abstract class SExpr {
 
     public abstract prettyPrint(output: string[], indent: string): void;
 
+    public abstract cpsTransform(succ: SExpr): SExpr;
+
     public abstract build(scope: LexicalScope): ASTNode;
 
     public pair(car: SExpr, cdr: SExpr): PairExpr {
@@ -92,7 +95,18 @@ export abstract class SExpr {
     }
 }
 
-export class BooleanExpr extends SExpr {
+export abstract class LeafExpr extends SExpr {
+    public cpsTransform(succ: SExpr): SExpr {
+        const range = this.range;
+        return new PairExpr(range,
+            succ,
+            new PairExpr(range,
+                this,
+                new NilExpr(range)));
+    }
+}
+
+export class BooleanExpr extends LeafExpr {
     public _class_BooleanExpr: any;
     public value: boolean;
 
@@ -129,7 +143,7 @@ export class BooleanExpr extends SExpr {
     }
 }
 
-export class NumberExpr extends SExpr {
+export class NumberExpr extends LeafExpr {
     public _class_NumberExpr: any;
     public value: number;
 
@@ -163,7 +177,7 @@ export class NumberExpr extends SExpr {
     }
 }
 
-export class StringExpr extends SExpr {
+export class StringExpr extends LeafExpr {
     public _class_StringExpr: any;
     public value: string;
 
@@ -197,7 +211,7 @@ export class StringExpr extends SExpr {
     }
 }
 
-export class SymbolExpr extends SExpr {
+export class SymbolExpr extends LeafExpr {
     public _class_SymbolExpr: any;
     public name: string;
 
@@ -234,7 +248,7 @@ export class SymbolExpr extends SExpr {
     }
 }
 
-export class QuoteExpr extends SExpr {
+export class QuoteExpr extends LeafExpr {
     public _class_QuoteExpr: any;
     public body: SExpr;
 
@@ -407,6 +421,34 @@ export class PairExpr extends SExpr {
         return items;
     }
 
+    public cpsTransform(succ: SExpr): SExpr {
+        const form = parseSpecialForm(this);
+        switch (form.kind) {
+            case "if":
+                return cps.transformIf(form, succ);
+            case "quote":
+                return cps.transformQuote(form, succ);
+            case "lambda":
+                return cps.transformLambda(form, succ);
+            case "set!":
+                return cps.transformSet(form, succ);
+            case "begin":
+                return cps.transformBegin(form, succ);
+            case "letrec":
+                return cps.transformLetrec(form, succ);
+            case "apply":
+                return cps.transformApply(this, succ);
+            case "throw":
+                throw new Error("throw: cpsTransform not implemented");
+            case "try":
+                throw new Error("try: cpsTransform not implemented");
+            // case "define": // TODO
+            //     break;
+            default:
+                throw new BuildError(this.car.range, "Unknown special form");
+        }
+    }
+
     public build(scope: LexicalScope): ASTNode {
         const form = parseSpecialForm(this);
         switch (form.kind) {
@@ -524,7 +566,7 @@ function makeInnerScope(outer: LexicalScope, symbols: SymbolExpr[]): LexicalScop
     return innerScope;
 }
 
-function getFormalParameterNames(start: SExpr): SymbolExpr[] {
+export function getFormalParameterNames(start: SExpr): SymbolExpr[] {
     const result: SymbolExpr[] = [];
     let item = start;
     while (item instanceof PairExpr) {
@@ -538,7 +580,7 @@ function getFormalParameterNames(start: SExpr): SymbolExpr[] {
     return result;
 }
 
-export class NilExpr extends SExpr {
+export class NilExpr extends LeafExpr {
     public _class_NilExpr: any;
 
     public constructor(range: SourceRange) {
@@ -570,7 +612,7 @@ export class NilExpr extends SExpr {
     }
 }
 
-export class UnspecifiedExpr extends SExpr {
+export class UnspecifiedExpr extends LeafExpr {
     public _class_UnspecifiedExpr: any;
 
     public constructor(range: SourceRange) {

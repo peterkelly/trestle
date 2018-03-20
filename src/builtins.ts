@@ -23,6 +23,7 @@ import {
     UnspecifiedValue,
 } from "./value";
 import { Continuation, SchemeException } from "./runtime";
+import { LambdaProcedureValue, ApplyNode } from "./ast";
 
 export type BuiltinDirect = (args: Value[]) => Value;
 export type BuiltinProcedure = (args: Value[], succeed: Continuation, fail: Continuation) => void;
@@ -290,6 +291,13 @@ function builtin_not(args: Value[]): Value {
         return new BooleanValue(!args[0].isTrue());
 }
 
+function builtin_succ(args: Value[]): Value {
+    if (args.length !== 1)
+        throw new SchemeException(new StringValue("SUCC requires exactly one argument"));
+    console.log("SUCC: " + args[0]);
+    return args[0];
+}
+
 export const builtins: { [name: string]: BuiltinDirect } = {
     "+": builtin_add,
     "-": builtin_subtract,
@@ -314,4 +322,28 @@ export const builtins: { [name: string]: BuiltinDirect } = {
     "string?": builtin_string_q,
     "null?": builtin_null_q,
     "not": builtin_not,
+    "SUCC": builtin_succ,
 };
+
+export function wrapBuiltinCPS(fun: BuiltinDirect): BuiltinDirect {
+    const wrapper: (args: Value[]) => Value =
+        (args: Value[]): Value => {
+            if (args.length === 0)
+                throw new Error("CPS procedure should receive at least one argument");
+            const cont = args[args.length - 1];
+            const directArgs = args.slice(0, args.length - 1);
+
+            if (cont instanceof BuiltinProcedureValue) {
+                const directResult = fun(directArgs);
+                return cont.direct([directResult]);
+            }
+            else if (cont instanceof LambdaProcedureValue) {
+                const directResult = fun(directArgs);
+                return ApplyNode.evalLambdaDirect(cont, [directResult], cont.proc.range);
+            }
+            else {
+                throw new Error("Expected continuation to be a procedure, is " + cont);
+            }
+        };
+    return wrapper;
+}

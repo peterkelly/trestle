@@ -14,12 +14,12 @@
 
 import * as fs from "fs";
 import { Parser } from "./parse";
-import { SExpr, PairExpr, NilExpr, BuildError, buildSequenceFromList } from "./sexpr";
+import { SExpr, SymbolExpr, PairExpr, NilExpr, BuildError, buildSequenceFromList } from "./sexpr";
 import { SourceInput, testSourceCoords } from "./source";
 import { LexicalScope } from "./scope";
 import { Environment, SchemeException } from "./runtime";
 import { Value, ErrorValue } from "./value";
-import { BuiltinProcedureValue, builtins } from "./builtins";
+import { BuiltinProcedureValue, builtins, wrapBuiltinCPS } from "./builtins";
 import { simplify } from "./simplify";
 
 // console.log("Hello World");
@@ -43,12 +43,19 @@ enum EvalKind {
     CPS,
 }
 
+enum Transformations {
+    None = 0,
+    Simplify = 1,
+    CPS = 2,
+}
+
 interface Options {
     evalKind: EvalKind;
     testCoordsOnly: boolean;
     prettyPrintOnly: boolean;
-    simplifyOnly: boolean;
     filename: string | null;
+    cpsBuiltins: boolean;
+    transformations: Transformations;
 }
 
 function parseCommandLineOptions(args: string[]): Options {
@@ -56,8 +63,9 @@ function parseCommandLineOptions(args: string[]): Options {
         evalKind: EvalKind.None,
         testCoordsOnly: false,
         prettyPrintOnly: false,
-        simplifyOnly: false,
         filename: null,
+        cpsBuiltins: false,
+        transformations: Transformations.Simplify,
     };
 
     for (let argno = 0; argno < args.length; argno++) {
@@ -74,8 +82,17 @@ function parseCommandLineOptions(args: string[]): Options {
             else if (args[argno] === "--pretty-print") {
                 options.prettyPrintOnly = true;
             }
+            else if (args[argno] === "--plain") {
+                options.transformations = Transformations.None;
+            }
             else if (args[argno] === "--simplify") {
-                options.simplifyOnly = true;
+                options.transformations = Transformations.Simplify;
+            }
+            else if (args[argno] === "--cps-transform") {
+                options.transformations = Transformations.CPS;
+            }
+            else if (args[argno] === "--cps-builtins") {
+                options.cpsBuiltins = true;
             }
             else {
                 console.error("Unknown option: " + args[argno]);
@@ -86,7 +103,7 @@ function parseCommandLineOptions(args: string[]): Options {
             options.filename = args[argno];
         }
         else {
-            console.error("Unknown option: " + args[argno]);
+            console.error("Unexpected argument: " + args[argno]);
             process.exit(1);
         }
     }
@@ -98,6 +115,14 @@ function simplifyProgram(itemList: PairExpr | NilExpr): void {
     let ptr: SExpr = itemList;
     while (ptr instanceof PairExpr) {
         ptr.car = simplify(ptr.car);
+        ptr = ptr.cdr;
+    }
+}
+
+function cpsTransformProgram(itemList: PairExpr | NilExpr): void {
+    let ptr: SExpr = itemList;
+    while (ptr instanceof PairExpr) {
+        ptr.car = ptr.car.cpsTransform(new SymbolExpr(ptr.car.range, "SUCC"));
         ptr = ptr.cdr;
     }
 }
@@ -139,23 +164,20 @@ function main(): void {
         }
         const itemList = p.parseTopLevel();
 
-        if (options.prettyPrintOnly) {
-            prettyPrintProgram(itemList);
-            process.exit(0);
-        }
-
-        if (options.simplifyOnly) {
+        // Apply transformations
+        if (options.transformations >= Transformations.Simplify) {
             simplifyProgram(itemList);
-            prettyPrintProgram(itemList);
-            process.exit(0);
         }
 
-        simplifyProgram(itemList);
-        if (!(itemList instanceof NilExpr)) {
-            // itemList.dump("");
+        if (options.transformations >= Transformations.CPS) {
+            cpsTransformProgram(itemList);
+            options.cpsBuiltins = true;
+        }
+
+        // Evaluate or print
+        if (!(itemList instanceof NilExpr) && (options.evalKind !== EvalKind.None)) {
             const built = buildSequenceFromList(toplevelScope, itemList);
-            // built.dump("");
-            // console.log("========================================");
+
             const topLevelEnv = new Environment(toplevelScope, null);
 
             for (const name of Object.keys(builtins).sort()) {
@@ -166,9 +188,10 @@ function main(): void {
                     throw new Error("No reference for top-level variable " + name);
                 }
                 const variable = topLevelEnv.getVar(ref.index, ref.name, ref.target);
-                variable.value = new BuiltinProcedureValue(name, fun);
-
-                // toplevelScope.addOwnSlot(name);
+                if (options.cpsBuiltins && (ref.name !== "SUCC"))
+                    variable.value = new BuiltinProcedureValue(name, wrapBuiltinCPS(fun));
+                else
+                    variable.value = new BuiltinProcedureValue(name, fun);
             }
 
             if (options.evalKind === EvalKind.Direct) {
@@ -202,9 +225,10 @@ function main(): void {
                             console.log("CPS Failure: " + value);
                     });
             }
-            else {
-                console.log("Evaluation kind not specified (--eval-direct or --eval-cps)");
-            }
+        }
+        else {
+            prettyPrintProgram(itemList);
+            process.exit(0);
         }
     }
     catch (e) {

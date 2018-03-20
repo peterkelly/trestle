@@ -1,0 +1,10 @@
+#!/bin/bash
+if [ ! -d actual ]; then
+    echo "Directory 'actual' does not exist"
+    exit 1
+fi
+rm -f actual/*
+for i in $(cd cps && echo *); do
+    node dist/main.js --cps-transform cps/$i > actual/$i
+    echo actual/$i
+done
