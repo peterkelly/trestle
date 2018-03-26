@@ -17,16 +17,26 @@ import { LexicalSlot, LexicalScope, LexicalRef } from "./scope";
 import { BuildError } from "./sexpr";
 import { ErrorValue } from "./value";
 import { SourceRange } from "./source";
+import { EnvSlotDataflowNode } from "./dataflow";
 
 export type Continuation = (value: Value) => void;
 
 export class Variable {
     public _class_Variable: any;
     public slot: LexicalSlot;
-    public value: Value;
+    public node: EnvSlotDataflowNode;
     public constructor(slot: LexicalSlot, value: Value) {
         this.slot = slot;
-        this.value = value;
+        this.node = new EnvSlotDataflowNode();
+        this.node.value = value;
+    }
+
+    public get value(): Value {
+        return this.node.value;
+    }
+
+    public set value(value: Value) {
+        this.node.value = value;
     }
 }
 

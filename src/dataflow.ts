@@ -42,6 +42,12 @@ export abstract class DataflowNode {
     public value: Value = UnspecifiedValue.instance;
 }
 
+export class EnvSlotDataflowNode extends DataflowNode {
+    public constructor() {
+        super();
+    }
+}
+
 export class ConstantDataflowNode extends DataflowNode {
     public constructor(public ast: ConstantNode, public env: Environment) {
         super();
