@@ -21,6 +21,7 @@ import { Environment, SchemeException } from "./runtime";
 import { Value, ErrorValue } from "./value";
 import { BuiltinProcedureValue, builtins, wrapBuiltinCPS } from "./builtins";
 import { simplify } from "./simplify";
+import { disableEvalDirect } from "./ast";
 
 // console.log("Hello World");
 // const p = new Parser("(test 1 2 3)");
@@ -41,6 +42,7 @@ enum EvalKind {
     None,
     Direct,
     CPS,
+    Reactive,
 }
 
 enum Transformations {
@@ -75,6 +77,9 @@ function parseCommandLineOptions(args: string[]): Options {
             }
             else if (args[argno] === "--eval-cps") {
                 options.evalKind = EvalKind.CPS;
+            }
+            else if (args[argno] === "--eval-reactive") {
+                options.evalKind = EvalKind.Reactive;
             }
             else if (args[argno] === "--test") {
                 options.testCoordsOnly = true;
@@ -225,6 +230,24 @@ function main(): void {
                             console.log("CPS Failure: " + value);
                     });
             }
+            else if (options.evalKind === EvalKind.Reactive) {
+                try {
+                    disableEvalDirect();
+                    const resultNode = built.createDataflowNode(topLevelEnv);
+                    console.log("REACTIVE Success: " + resultNode.value);
+                }
+                catch (e) {
+                    if (e instanceof SchemeException) {
+                        if (e.value instanceof ErrorValue)
+                            showBuildError(e.value.error, filename, input);
+                        else
+                            console.log("REACTIVE Failure: " + e.value);
+                    }
+                    else {
+                        console.error(e);
+                    }
+                }
+            }
         }
         else {
             prettyPrintProgram(itemList);
@@ -235,8 +258,15 @@ function main(): void {
         if (e instanceof BuildError) {
             showBuildError(e, filename, input);
         }
+        else if (e instanceof SchemeException) {
+            if (e.value instanceof ErrorValue)
+                showBuildError(e.value.error, filename, input);
+            else
+                console.log("DIRECT Failure: " + e.value);
+        }
         else {
-            throw e;
+            console.error("" + e);
+            console.error(e);
         }
     }
 }

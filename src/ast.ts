@@ -18,6 +18,25 @@ import { LexicalRef, LexicalScope } from "./scope";
 import { Value, ErrorValue, PairValue, NilValue, UnspecifiedValue } from "./value";
 import { Environment, Continuation, SchemeException } from "./runtime";
 import { BuiltinProcedureValue } from "./builtins";
+import {
+    DataflowNode,
+    ConstantDataflowNode,
+    AssignDataflowNode,
+    IfDataflowNode,
+    LambdaDataflowNode,
+    SequenceDataflowNode,
+    ApplyDataflowNode,
+    VariableDataflowNode,
+    LetrecDataflowNode,
+} from "./dataflow";
+
+let evalDirectEnabled = true;
+
+// This function is called when running in reactive evaluation mode. It's a sanity check to
+// ensure the interpreter doesn't "leak" into direct evaluation style.
+export function disableEvalDirect(): void {
+    evalDirectEnabled = false;
+}
 
 export abstract class ASTNode {
     public _class_ASTNode: any;
@@ -32,6 +51,13 @@ export abstract class ASTNode {
     public abstract evalCps(env: Environment, succeed: Continuation, fail: Continuation): void;
 
     public abstract evalDirect(env: Environment): Value;
+
+    public abstract createDataflowNode(env: Environment): DataflowNode;
+
+    protected checkEvalDirectEnabled(): void {
+        if (!evalDirectEnabled)
+            throw new Error("Attempt to call " + (<any> this).constructor.name + ".evalDirect()");
+    }
 }
 
 export class ConstantNode extends ASTNode {
@@ -52,7 +78,12 @@ export class ConstantNode extends ASTNode {
     }
 
     public evalDirect(env: Environment): Value {
+        this.checkEvalDirectEnabled();
         return this.value.toValue();
+    }
+
+    public createDataflowNode(env: Environment): DataflowNode {
+        return new ConstantDataflowNode(this, env);
     }
 }
 
@@ -89,6 +120,7 @@ export class TryNode extends ASTNode {
     }
 
     public evalDirect(env: Environment): Value {
+        this.checkEvalDirectEnabled();
         try {
             return this.tryBody.evalDirect(env);
         }
@@ -102,6 +134,10 @@ export class TryNode extends ASTNode {
                 throw e;
             }
         }
+    }
+
+    public createDataflowNode(env: Environment): DataflowNode {
+        throw new BuildError(this.range, "Exceptions are unsupported in reactive evaluation mode");
     }
 }
 
@@ -128,8 +164,13 @@ export class ThrowNode extends ASTNode {
     }
 
     public evalDirect(env: Environment): Value {
+        this.checkEvalDirectEnabled();
         const value = this.body.evalDirect(env);
         throw new SchemeException(value);
+    }
+
+    public createDataflowNode(env: Environment): DataflowNode {
+        throw new BuildError(this.range, "Exceptions are unsupported in reactive evaluation mode");
     }
 }
 
@@ -158,10 +199,15 @@ export class AssignNode extends ASTNode {
     }
 
     public evalDirect(env: Environment): Value {
+        this.checkEvalDirectEnabled();
         const value = this.body.evalDirect(env);
         const variable = env.resolveRef(this.ref, this.range);
         variable.value = value;
         return UnspecifiedValue.instance;
+    }
+
+    public createDataflowNode(env: Environment): DataflowNode {
+        return new AssignDataflowNode(this, env);
     }
 }
 
@@ -196,11 +242,16 @@ export class IfNode extends ASTNode {
     }
 
     public evalDirect(env: Environment): Value {
+        this.checkEvalDirectEnabled();
         const condValue = this.condition.evalDirect(env);
         if (condValue.isTrue())
             return this.consequent.evalDirect(env);
         else
             return this.alternative.evalDirect(env);
+    }
+
+    public createDataflowNode(env: Environment): DataflowNode {
+        return new IfDataflowNode(this, env);
     }
 }
 
@@ -243,7 +294,12 @@ export class LambdaNode extends ASTNode {
     }
 
     public evalDirect(env: Environment): Value {
+        this.checkEvalDirectEnabled();
         return new LambdaProcedureValue(env, this);
+    }
+
+    public createDataflowNode(env: Environment): DataflowNode {
+        return new LambdaDataflowNode(this, env);
     }
 }
 
@@ -276,8 +332,13 @@ export class SequenceNode extends ASTNode {
     }
 
     public evalDirect(env: Environment): Value {
+        this.checkEvalDirectEnabled();
         this.body.evalDirect(env);
         return this.next.evalDirect(env);
+    }
+
+    public createDataflowNode(env: Environment): DataflowNode {
+        return new SequenceDataflowNode(this, env);
     }
 }
 
@@ -357,6 +418,7 @@ export class ApplyNode extends ASTNode {
     }
 
     public evalDirect(env: Environment): Value {
+        this.checkEvalDirectEnabled();
         const procValue: Value = this.proc.evalDirect(env);
         const argArray: Value[] = [];
         for (let i = 0; i < this.args.length; i++) {
@@ -377,6 +439,10 @@ export class ApplyNode extends ASTNode {
         }
     }
 
+    public createDataflowNode(env: Environment): DataflowNode {
+        return new ApplyDataflowNode(this, env);
+    }
+
     public static evalLambdaDirect(procValue: LambdaProcedureValue, argArray: Value[], range: SourceRange): Value {
         const outerEnv = procValue.env;
         const lambdaNode = procValue.proc;
@@ -394,7 +460,7 @@ export class ApplyNode extends ASTNode {
     }
 }
 
-function bindLambdaArguments(argArray: Value[], lambdaNode: LambdaNode, outerEnv: Environment): Environment {
+export function bindLambdaArguments(argArray: Value[], lambdaNode: LambdaNode, outerEnv: Environment): Environment {
     const innerEnv = new Environment(lambdaNode.innerScope, outerEnv);
     for (let i = 0; i < argArray.length; i++) {
         if (i >= lambdaNode.variables.length) { // sanity check
@@ -435,8 +501,13 @@ export class VariableNode extends ASTNode {
     }
 
     public evalDirect(env: Environment): Value {
+        this.checkEvalDirectEnabled();
         const variable = env.resolveRef(this.ref, this.range);
         return variable.value;
+    }
+
+    public createDataflowNode(env: Environment): DataflowNode {
+        return new VariableDataflowNode(this, env);
     }
 }
 
@@ -493,6 +564,7 @@ export class LetrecNode extends ASTNode {
     }
 
     public evalDirect(env: Environment): Value {
+        this.checkEvalDirectEnabled();
         const innerEnv = new Environment(this.innerScope, env);
         const bindingArray: Value[] = [];
         for (const binding of this.bindings)
@@ -500,9 +572,13 @@ export class LetrecNode extends ASTNode {
         bindLetrecValues(bindingArray, this, innerEnv);
         return this.body.evalDirect(innerEnv);
     }
+
+    public createDataflowNode(env: Environment): DataflowNode {
+        return new LetrecDataflowNode(this, env);
+    }
 }
 
-function bindLetrecValues(values: Value[], letrecNode: LetrecNode, innerEnv: Environment): void {
+export function bindLetrecValues(values: Value[], letrecNode: LetrecNode, innerEnv: Environment): void {
     for (let i = 0; i < values.length; i++) {
         if (i >= letrecNode.bindings.length) { // sanity check
             throw new Error("Invalid argument number: more than # bindings");
