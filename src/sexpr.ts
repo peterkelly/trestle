@@ -26,6 +26,7 @@ import {
     LetrecNode,
     TryNode,
     ThrowNode,
+    InputNode,
 } from "./ast";
 import {
     SourceRange,
@@ -495,6 +496,8 @@ export class PairExpr extends SExpr {
                     throw new BuildError(form.catchBody.range, "catch must accept exactly one argument");
                 return new TryNode(this.range, tryBody, catchBody);
             }
+            case "input":
+                return new InputNode(this.range, form.name.name);
             case "apply":
                 break;
             default:

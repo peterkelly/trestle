@@ -76,6 +76,11 @@ export interface TryForm extends SpecialFormBase {
     catchBody: SExpr;
 }
 
+export interface InputForm extends SpecialFormBase {
+    kind: "input";
+    name: SymbolExpr;
+}
+
 export interface ApplyForm {
     list: PairExpr;
     kind: "apply";
@@ -90,6 +95,7 @@ export type SpecialForm =
     LetrecForm |
     ThrowForm |
     TryForm |
+    InputForm |
     ApplyForm;
 
 export function parseSpecialForm(list: PairExpr): SpecialForm {
@@ -253,6 +259,20 @@ export function parseSpecialForm(list: PairExpr): SpecialForm {
                     kind: "try",
                     tryBody: items[1],
                     catchBody: items[2],
+                };
+                return result;
+            }
+            case "input": {
+                if (items.length !== 2)
+                    throw new BuildError(first.range, "input requires exactly one argument");
+                const name = items[1];
+                if (!(name instanceof SymbolExpr))
+                    throw new BuildError(first.range, "input's argument must be a symbol");
+                const result: InputForm = {
+                    list: list,
+                    keyword: first,
+                    kind: "input",
+                    name: name,
                 };
                 return result;
             }

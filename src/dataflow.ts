@@ -38,6 +38,30 @@ import {
     bindLetrecValues,
 } from "./ast";
 
+const allInputs = new Map<string, InputDataflowNode>();
+
+export function createInput(name: string, initialValue: Value): void {
+    const existing = allInputs.get(name);
+    if (existing !== undefined)
+        throw new Error("Input " + JSON.stringify(name) + " already exits");
+    const node = new InputDataflowNode(initialValue);
+    allInputs.set(name, node);
+}
+
+export function getInput(name: string): InputDataflowNode {
+    const input = allInputs.get(name);
+    if (input === undefined)
+        throw new Error("Input " + JSON.stringify(name) + " does not exist");
+    return input;
+}
+
+export function updateInput(name: string, value: Value): void {
+    const input = allInputs.get(name);
+    if (input === undefined)
+        throw new Error("Input " + JSON.stringify(name) + " does not exist");
+    // TODO: Update the value of the input node and propagate changes throughout the dataflow graph
+}
+
 export abstract class DataflowNode {
     public value: Value = UnspecifiedValue.instance;
 }
@@ -160,3 +184,9 @@ export class LetrecDataflowNode extends DataflowNode {
     }
 }
 
+export class InputDataflowNode extends DataflowNode {
+    public constructor(initialValue: Value) {
+        super();
+        this.value = initialValue;
+    }
+}

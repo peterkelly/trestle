@@ -18,10 +18,11 @@ import { SExpr, SymbolExpr, PairExpr, NilExpr, BuildError, buildSequenceFromList
 import { SourceInput, testSourceCoords } from "./source";
 import { LexicalScope } from "./scope";
 import { Environment, SchemeException } from "./runtime";
-import { Value, ErrorValue } from "./value";
+import { Value, NumberValue, ErrorValue } from "./value";
 import { BuiltinProcedureValue, builtins, wrapBuiltinCPS } from "./builtins";
 import { simplify } from "./simplify";
 import { disableEvalDirect } from "./ast";
+import { createInput } from "./dataflow";
 
 // console.log("Hello World");
 // const p = new Parser("(test 1 2 3)");
@@ -233,6 +234,8 @@ function main(): void {
             else if (options.evalKind === EvalKind.Reactive) {
                 try {
                     disableEvalDirect();
+                    const counter = 0;
+                    createInput("test", new NumberValue(counter));
                     const resultNode = built.createDataflowNode(topLevelEnv);
                     console.log("REACTIVE Success: " + resultNode.value);
                 }

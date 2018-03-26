@@ -19,6 +19,7 @@ import { Value, ErrorValue, PairValue, NilValue, UnspecifiedValue } from "./valu
 import { Environment, Continuation, SchemeException } from "./runtime";
 import { BuiltinProcedureValue } from "./builtins";
 import {
+    getInput,
     DataflowNode,
     ConstantDataflowNode,
     AssignDataflowNode,
@@ -575,6 +576,30 @@ export class LetrecNode extends ASTNode {
 
     public createDataflowNode(env: Environment): DataflowNode {
         return new LetrecDataflowNode(this, env);
+    }
+}
+
+export class InputNode extends ASTNode {
+    public _class_InputNode: any;
+    public constructor(range: SourceRange, public name: string) {
+        super(range);
+    }
+
+    public dump(indent: string): void {
+        console.log(indent + "Input " + this.name);
+    }
+
+    public evalCps(env: Environment, succeed: Continuation, fail: Continuation): void {
+        throw new BuildError(this.range, "InputNode.evalCps() not implemented");
+    }
+
+    public evalDirect(env: Environment): Value {
+        this.checkEvalDirectEnabled();
+        throw new BuildError(this.range, "InputNode.evalDirect() not implemented");
+    }
+
+    public createDataflowNode(env: Environment): DataflowNode {
+        return getInput(this.name);
     }
 }
 
