@@ -58,7 +58,7 @@ export class BuiltinProcedureValue extends Value {
         this.direct = direct;
     }
 
-    public print(output: string[], visiting: Set<Value>): void {
+    public printImpl(output: string[], visiting: Set<Value>): void {
         output.push("<builtin procedure " + JSON.stringify(this.name) + ">");
     }
 }

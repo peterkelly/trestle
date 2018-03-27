@@ -14,18 +14,45 @@
 
 import { BuildError } from "./sexpr";
 
+export interface PrintOptions {
+    generation?: number;
+    inGeneration?: boolean;
+}
+
 export abstract class Value {
     public _class_Value: any;
+    public static currentGeneration: number = 0;
+    public generation: number;
 
     public constructor() {
+        this.generation = Value.currentGeneration;
     }
 
-    public abstract print(output: string[], visiting: Set<Value>): void;
+    public abstract printImpl(output: string[], visiting: Set<Value>, options: PrintOptions): void;
+
+    public print(output: string[], visiting: Set<Value>, options: PrintOptions): void {
+        const showGeneration =
+            (options.generation !== undefined) &&
+            (options.generation === this.generation) &&
+            !options.inGeneration;
+        if (showGeneration)
+            output.push("\x1b[7m");
+        this.printImpl(output, visiting, {
+            generation: options.generation,
+            inGeneration: showGeneration || options.inGeneration,
+        });
+        if (showGeneration)
+            output.push("\x1b[0m");
+    }
 
     public toString(): string {
+        return this.toStringWithOptions({});
+    }
+
+    public toStringWithOptions(options: PrintOptions): string {
         const visiting = new Set<Value>();
         const output: string[] = [];
-        this.print(output, visiting);
+        this.print(output, visiting, options);
         return output.join("");
     }
 
@@ -43,7 +70,7 @@ export class BooleanValue extends Value {
         this.data = data;
     }
 
-    public print(output: string[], visiting: Set<Value>): void {
+    public printImpl(output: string[], visiting: Set<Value>, options: PrintOptions): void {
         output.push(this.data ? "#t" : "#f");
     }
 
@@ -61,7 +88,7 @@ export class SymbolValue extends Value {
         this.data = data;
     }
 
-    public print(output: string[], visiting: Set<Value>): void {
+    public printImpl(output: string[], visiting: Set<Value>, options: PrintOptions): void {
         output.push("" + this.data);
     }
 }
@@ -75,7 +102,7 @@ export class CharValue extends Value {
         this.data = data;
     }
 
-    public print(output: string[], visiting: Set<Value>): void {
+    public printImpl(output: string[], visiting: Set<Value>, options: PrintOptions): void {
         output.push("" + this.data);
     }
 }
@@ -87,7 +114,7 @@ export class VectorValue extends Value {
         super();
     }
 
-    public print(output: string[], visiting: Set<Value>): void {
+    public printImpl(output: string[], visiting: Set<Value>, options: PrintOptions): void {
         output.push("[vector]"); // TODO
     }
 }
@@ -99,7 +126,7 @@ export class ProcedureValue extends Value {
         super();
     }
 
-    public print(output: string[], visiting: Set<Value>): void {
+    public printImpl(output: string[], visiting: Set<Value>, options: PrintOptions): void {
         output.push("[procedure]"); // TODO"
     }
 }
@@ -122,7 +149,7 @@ export class PairValue extends Value {
         return (item instanceof NilValue);
     }
 
-    public print(output: string[], visiting: Set<Value>): void {
+    public printImpl(output: string[], visiting: Set<Value>, options: PrintOptions): void {
         if (visiting.has(this)) {
             output.push("*recursive*");
             return;
@@ -133,7 +160,7 @@ export class PairValue extends Value {
             output.push("(");
             let item: Value = this;
             while (item instanceof PairValue) {
-                item.car.print(output, visiting);
+                item.car.print(output, visiting, options);
                 if (item.cdr instanceof PairValue)
                     output.push(" ");
                 item = item.cdr;
@@ -142,9 +169,9 @@ export class PairValue extends Value {
         }
         else {
             output.push("(");
-            this.car.print(output, visiting);
+            this.car.print(output, visiting, options);
             output.push(" . ");
-            this.cdr.print(output, visiting);
+            this.cdr.print(output, visiting, options);
             output.push(")");
         }
         visiting.delete(this);
@@ -160,7 +187,7 @@ export class NumberValue extends Value {
         this.data = data;
     }
 
-    public print(output: string[], visiting: Set<Value>): void {
+    public printImpl(output: string[], visiting: Set<Value>, options: PrintOptions): void {
         output.push("" + this.data);
     }
 }
@@ -174,7 +201,7 @@ export class StringValue extends Value {
         this.data = data;
     }
 
-    public print(output: string[], visiting: Set<Value>): void {
+    public printImpl(output: string[], visiting: Set<Value>, options: PrintOptions): void {
         output.push(JSON.stringify(this.data));
     }
 }
@@ -186,7 +213,7 @@ export class PortValue extends Value {
         super();
     }
 
-    public print(output: string[], visiting: Set<Value>): void {
+    public printImpl(output: string[], visiting: Set<Value>, options: PrintOptions): void {
         output.push("[port]");
     }
 }
@@ -198,7 +225,7 @@ export class NilValue extends Value {
         super();
     }
 
-    public print(output: string[], visiting: Set<Value>): void {
+    public printImpl(output: string[], visiting: Set<Value>, options: PrintOptions): void {
         output.push("nil");
     }
 
@@ -212,7 +239,7 @@ export class UnspecifiedValue extends Value {
         super();
     }
 
-    public print(output: string[], visiting: Set<Value>): void {
+    public printImpl(output: string[], visiting: Set<Value>, options: PrintOptions): void {
         output.push("*unspecified*");
     }
 
@@ -228,7 +255,7 @@ export class ErrorValue extends Value {
         this.error = error;
     }
 
-    public print(output: string[], visiting: Set<Value>): void {
+    public printImpl(output: string[], visiting: Set<Value>, options: PrintOptions): void {
         output.push("[error " + JSON.stringify(this.error.detail) + "]");
     }
 }

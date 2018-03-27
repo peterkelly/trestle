@@ -267,7 +267,7 @@ export class LambdaProcedureValue extends Value {
         this.proc = proc;
     }
 
-    public print(output: string[], visiting: Set<Value>): void {
+    public printImpl(output: string[], visiting: Set<Value>): void {
         output.push("<lambda ("  + this.proc.variables.join(" ") + ")>");
     }
 }

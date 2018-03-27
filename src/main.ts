@@ -39,6 +39,23 @@ function showBuildError(e: BuildError, filename: string, input: string): void {
     console.log(e.stack);
 }
 
+function showError(prefix: string, e: any, filename: string, input: string): void {
+    if (e instanceof SchemeException) {
+        if (e.value instanceof ErrorValue)
+            showBuildError(e.value.error, filename, input);
+        else
+            console.log(prefix + e.value);
+    }
+    else if (e instanceof BuildError) {
+        showBuildError(e, filename, input);
+    }
+    else {
+        console.error("" + e);
+        console.error("Detail:");
+        console.error(e);
+    }
+}
+
 enum EvalKind {
     None,
     Direct,
@@ -206,15 +223,7 @@ function main(): void {
                     console.log("DIRECT Success: " + value);
                 }
                 catch (e) {
-                    if (e instanceof SchemeException) {
-                        if (e.value instanceof ErrorValue)
-                            showBuildError(e.value.error, filename, input);
-                        else
-                            console.log("DIRECT Failure: " + e.value);
-                    }
-                    else {
-                        console.error(e);
-                    }
+                    showError("DIRECT Failure: ", e, filename, input);
                 }
             }
             else if (options.evalKind === EvalKind.CPS) {
@@ -240,15 +249,7 @@ function main(): void {
                     console.log("REACTIVE Success: " + resultNode.value);
                 }
                 catch (e) {
-                    if (e instanceof SchemeException) {
-                        if (e.value instanceof ErrorValue)
-                            showBuildError(e.value.error, filename, input);
-                        else
-                            console.log("REACTIVE Failure: " + e.value);
-                    }
-                    else {
-                        console.error(e);
-                    }
+                    showError("REACTIVE Failure: ", e, filename, input);
                 }
             }
         }
@@ -258,19 +259,7 @@ function main(): void {
         }
     }
     catch (e) {
-        if (e instanceof BuildError) {
-            showBuildError(e, filename, input);
-        }
-        else if (e instanceof SchemeException) {
-            if (e.value instanceof ErrorValue)
-                showBuildError(e.value.error, filename, input);
-            else
-                console.log("DIRECT Failure: " + e.value);
-        }
-        else {
-            console.error("" + e);
-            console.error(e);
-        }
+        showError("", e, filename, input);
     }
 }
 
