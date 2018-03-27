@@ -22,7 +22,7 @@ import { Value, NumberValue, ErrorValue } from "./value";
 import { BuiltinProcedureValue, builtins, wrapBuiltinCPS } from "./builtins";
 import { simplify } from "./simplify";
 import { disableEvalDirect } from "./ast";
-import { createInput } from "./dataflow";
+import { createInput, updateInput, reevaluateDataflowGraph } from "./dataflow";
 
 // console.log("Hello World");
 // const p = new Parser("(test 1 2 3)");
@@ -243,10 +243,28 @@ function main(): void {
             else if (options.evalKind === EvalKind.Reactive) {
                 try {
                     disableEvalDirect();
-                    const counter = 0;
+                    let counter = 0;
+
+                    Value.currentGeneration = counter;
                     createInput("test", new NumberValue(counter));
                     const resultNode = built.createDataflowNode(topLevelEnv);
-                    console.log("REACTIVE Success: " + resultNode.value);
+                    resultNode.dump("  * ");
+                    console.log("" + resultNode.value);
+
+                    setInterval(() => {
+                        try {
+                            counter++;
+                            Value.currentGeneration = counter;
+                            updateInput("test", new NumberValue(counter));
+                            reevaluateDataflowGraph();
+                            resultNode.dump("  * ");
+                            console.log("" + resultNode.value.toStringWithOptions({ generation: Value.currentGeneration }));
+                        }
+                        catch (e) {
+                            console.error("" + e);
+                            console.error(e);
+                        }
+                    }, 1000);
                 }
                 catch (e) {
                     showError("REACTIVE Failure: ", e, filename, input);

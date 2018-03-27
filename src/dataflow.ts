@@ -73,7 +73,7 @@ export function updateInput(name: string, value: Value): void {
     const input = allInputs.get(name);
     if (input === undefined)
         throw new Error("Input " + JSON.stringify(name) + " does not exist");
-    // TODO: Update the value of the input node and propagate changes throughout the dataflow graph
+    input.updateValue(value);
 }
 
 export abstract class DataflowNode {
@@ -143,6 +143,12 @@ export abstract class DataflowNode {
 
     protected trace(msg: string): void {
         console.log(this + " " + msg);
+    }
+
+    public dump(indent: string): void {
+        console.log(indent + this + " = " + this.value);
+        for (const input of this.inputs)
+            input.dump(indent + "  i ");
     }
 
     // Called when the change propagation logic has determined that one or more inputs to this
