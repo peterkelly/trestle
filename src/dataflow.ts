@@ -199,9 +199,9 @@ export class AssignDataflowNode extends DataflowNode {
     public constructor(public ast: AssignNode, public env: Environment) {
         super();
 
-        const value = this.ast.body.createDataflowNode(this.env).value;
-        const variable = this.env.resolveRef(this.ast.ref, this.ast.range);
-        variable.value = value;
+        const node = this.ast.body.createDataflowNode(env);
+        const variable = env.resolveRef(this.ast.ref, this.ast.range);
+        variable.node = node;
         this.value = UnspecifiedValue.instance;
     }
 
