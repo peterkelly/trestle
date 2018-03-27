@@ -216,22 +216,44 @@ export class AssignDataflowNode extends DataflowNode {
 }
 
 export class IfDataflowNode extends DataflowNode {
+    private cond: DataflowNode;
+    private isTrue: boolean;
+    private branch: DataflowNode;
+
     public constructor(public ast: IfNode, public env: Environment) {
         super();
 
-        const condValue = this.ast.condition.createDataflowNode(this.env).value;
-        if (condValue.isTrue())
-            this.value = this.ast.consequent.createDataflowNode(this.env).value;
+        this.cond = this.ast.condition.createDataflowNode(this.env);
+        this.cond.addOutput(this);
+        this.isTrue = this.cond.value.isTrue();
+
+        if (this.isTrue)
+            this.branch = this.ast.consequent.createDataflowNode(this.env);
         else
-            this.value = this.ast.alternative.createDataflowNode(this.env).value;
+            this.branch = this.ast.alternative.createDataflowNode(this.env);
+        this.branch.addOutput(this);
+        this.value = this.branch.value;
     }
 
     public reevaluate(): void {
-        throw new Error("IfDataflowNode.reevaluate() not implemented");
+        if (this.isTrue !== this.cond.value.isTrue()) {
+            this.trace("Condition changed to " + this.cond.value.isTrue());
+            this.branch.removeOutput(this);
+            this.isTrue = this.cond.value.isTrue();
+            if (this.isTrue)
+                this.branch = this.ast.consequent.createDataflowNode(this.env);
+            else
+                this.branch = this.ast.alternative.createDataflowNode(this.env);
+            this.branch.addOutput(this);
+            this.markOutputsAsDirty();
+        }
+
+        this.updateValue(this.branch.value);
     }
 
     public detach(): void {
-        throw new Error("IfDataflowNode.reevaluate() not implemented");
+        this.cond.removeOutput(this);
+        this.branch.removeOutput(this);
     }
 }
 
