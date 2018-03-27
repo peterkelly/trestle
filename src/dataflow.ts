@@ -34,12 +34,16 @@ import {
     ApplyNode,
     VariableNode,
     LetrecNode,
-    bindLambdaArguments,
     bindLetrecValues,
 } from "./ast";
 
 const allInputs = new Map<string, InputDataflowNode>();
 let dirtyNodes: DataflowNode[] = [];
+
+export interface DataflowCallInfo {
+    argNodes: DataflowNode[] | null;
+    existing: DataflowNode | null;
+}
 
 export function reevaluateDataflowGraph(): void {
     while (true) {
@@ -264,70 +268,143 @@ export class SequenceDataflowNode extends DataflowNode {
     }
 }
 
-export class ApplyDataflowNode extends DataflowNode {
-    public constructor(public ast: ApplyNode, public env: Environment) {
+export class BuiltinCallDataflowNode extends DataflowNode {
+    public constructor(private procValue: BuiltinProcedureValue, private args: DataflowNode[]) {
         super();
-
-        const procValue: Value = this.ast.proc.createDataflowNode(this.env).value;
-        const argArray: Value[] = [];
-        for (let i = 0; i < this.ast.args.length; i++) {
-            const arg = this.ast.args[i];
-            argArray.push(arg.createDataflowNode(this.env).value);
-        }
-
-        if (procValue instanceof BuiltinProcedureValue) {
-            this.value = procValue.direct(argArray);
-        }
-        else if (procValue instanceof LambdaProcedureValue) {
-            this.value = ApplyDataflowNode.evalLambda(procValue, argArray, this.ast.range);
-        }
-        else {
-            const msg = "Cannot apply " + procValue;
-            const error = new BuildError(this.ast.range, msg);
-            throw new SchemeException(new ErrorValue(error));
-        }
+        for (const arg of this.args)
+            arg.addOutput(this);
+        const argValues = this.args.map(arg => arg.value);
+        this.value = this.procValue.direct(argValues);
     }
 
-    public static evalLambda(procValue: LambdaProcedureValue, argArray: Value[], range: SourceRange): Value {
-        const outerEnv = procValue.env;
-        const lambdaNode = procValue.proc;
-
-        const expectedArgCount = lambdaNode.variables.length;
-        const actualArgCount = argArray.length;
-        if (actualArgCount !== expectedArgCount) {
-            const msg = "Incorrect number of arguments; have " + actualArgCount + ", expected " + expectedArgCount;
-            const error = new BuildError(range, msg);
-            throw new SchemeException(new ErrorValue(error));
-        }
-
-        const innerEnv = bindLambdaArguments(argArray, lambdaNode, outerEnv);
-        const node = procValue.proc.body.createDataflowNode(innerEnv);
-        return node.value;
+    public toString(): string {
+        return super.toString() + " (" + this.procValue.name + ")";
     }
 
     public reevaluate(): void {
-        throw new Error("ApplyDataflowNode.reevaluate() not implemented");
+        const argValues = this.args.map(a => a.value);
+        const df: DataflowCallInfo = {
+            argNodes: this.args,
+            existing: this,
+        };
+        this.updateValue(this.procValue.direct(argValues, df));
     }
 
     public detach(): void {
-        throw new Error("ApplyDataflowNode.reevaluate() not implemented");
+        for (const arg of this.args)
+            arg.removeOutput(this);
+    }
+}
+
+function bindLambdaArgumentNodes(args: DataflowNode[], lambdaNode: LambdaNode, outerEnv: Environment): Environment {
+    const innerEnv = new Environment(lambdaNode.innerScope, outerEnv);
+    for (let i = 0; i < args.length; i++) {
+        if (i >= lambdaNode.variables.length) { // sanity check
+            throw new Error("Invalid argument number: more than # variables");
+        }
+        if (i >= lambdaNode.innerScope.slots.length) { // sanity check
+            throw new Error("Invalid argument number: more than # slots");
+        }
+        const variable = innerEnv.getVar(i, lambdaNode.variables[i], lambdaNode.innerScope.slots[i]);
+        variable.node = args[i];
+    }
+    return innerEnv;
+}
+
+function createLambdaCallNode(procValue: LambdaProcedureValue, args: DataflowNode[], range: SourceRange): DataflowNode {
+    const outerEnv = procValue.env;
+    const lambdaNode = procValue.proc;
+
+    const expectedArgCount = lambdaNode.variables.length;
+    const actualArgCount = args.length;
+    if (actualArgCount !== expectedArgCount) {
+        const msg = "Incorrect number of arguments; have " + actualArgCount + ", expected " + expectedArgCount;
+        const error = new BuildError(range, msg);
+        throw new SchemeException(new ErrorValue(error));
+    }
+
+    const innerEnv = bindLambdaArgumentNodes(args, lambdaNode, outerEnv);
+    return procValue.proc.body.createDataflowNode(innerEnv);
+}
+
+function createCallNode(procValue: Value, args: DataflowNode[], range: SourceRange): DataflowNode {
+    if (procValue instanceof BuiltinProcedureValue) {
+        return new BuiltinCallDataflowNode(procValue, args);
+    }
+    else if (procValue instanceof LambdaProcedureValue) {
+        return createLambdaCallNode(procValue, args, range);
+    }
+    else {
+        const msg = "Cannot apply " + procValue;
+        const error = new BuildError(range, msg);
+        throw new SchemeException(new ErrorValue(error));
+    }
+}
+
+export class ApplyDataflowNode extends DataflowNode {
+    private proc: DataflowNode;
+    private procValue: Value;
+    private call: DataflowNode;
+    private args: DataflowNode[];
+
+    public constructor(public ast: ApplyNode, public env: Environment) {
+        super();
+
+        this.proc = this.ast.proc.createDataflowNode(this.env);
+        this.proc.addOutput(this);
+        this.procValue = this.proc.value;
+        this.args = this.ast.args.map(arg => arg.createDataflowNode(this.env));
+
+        this.call = createCallNode(this.procValue, this.args, this.ast.range);
+        this.call.addOutput(this);
+        this.value = this.call.value;
+    }
+
+    public toString(): string {
+        if (this.procValue instanceof BuiltinProcedureValue)
+            return super.toString() + " (" + this.procValue + ")";
+        else if (this.procValue instanceof LambdaProcedureValue)
+            return super.toString() + " (lambda)";
+        else
+            return super.toString() + " (?)";
+    }
+
+    public reevaluate(): void {
+        // If the procedure node's value has changed, then we need to re-create the portion of
+        // the dataflow graph that corresponds to the procedure.
+        if (this.procValue !== this.proc.value) {
+            this.procValue = this.proc.value;
+            this.call.removeOutput(this);
+            this.call = createCallNode(this.procValue, this.args, this.ast.range);
+            this.call.addOutput(this);
+        }
+
+        this.updateValue(this.call.value);
+    }
+
+    public detach(): void {
+        this.proc.removeOutput(this);
+        this.call.removeOutput(this);
     }
 }
 
 export class VariableDataflowNode extends DataflowNode {
+    private node: DataflowNode;
+
     public constructor(public ast: VariableNode, public env: Environment) {
         super();
 
-        const variable = this.env.resolveRef(this.ast.ref, this.ast.range);
-        this.value = variable.value;
+        this.node = this.env.resolveRef(this.ast.ref, this.ast.range).node;
+        this.node.addOutput(this);
+        this.value = this.node.value;
     }
 
     public reevaluate(): void {
-        throw new Error("VariableDataflowNode.reevaluate() not implemented");
+        this.updateValue(this.node.value);
     }
 
     public detach(): void {
-        throw new Error("VariableDataflowNode.reevaluate() not implemented");
+        this.node.removeOutput(this);
     }
 }
 

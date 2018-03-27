@@ -13,6 +13,7 @@
 // limitations under the License.
 
 import {
+    PrintOptions,
     Value,
     NumberValue,
     StringValue,
@@ -25,8 +26,9 @@ import {
 } from "./value";
 import { Continuation, SchemeException } from "./runtime";
 import { LambdaProcedureValue, ApplyNode } from "./ast";
+import { DataflowCallInfo } from "./dataflow";
 
-export type BuiltinDirect = (args: Value[]) => Value;
+export type BuiltinDirect = (args: Value[], df?: DataflowCallInfo) => Value;
 export type BuiltinProcedure = (args: Value[], succeed: Continuation, fail: Continuation) => void;
 export type NumericBuiltin = (args: number[]) => number;
 export type NumRelationalBuiltin = (a: number, b: number) => boolean;
@@ -58,8 +60,8 @@ export class BuiltinProcedureValue extends Value {
         this.direct = direct;
     }
 
-    public printImpl(output: string[], visiting: Set<Value>): void {
-        output.push("<builtin procedure " + JSON.stringify(this.name) + ">");
+    public printImpl(output: string[], visiting: Set<Value>, options: PrintOptions): void {
+        output.push("%" + this.name);
     }
 }
 
@@ -208,12 +210,31 @@ function builtin_newline(args: Value[]): Value {
     return UnspecifiedValue.instance;
 }
 
-function builtin_cons(args: Value[]): Value {
-    if (args.length !== 2)
-        throw new SchemeException(new StringValue("const requires exactly two arguments"));
+function builtin_cons(args: Value[], df?: DataflowCallInfo): Value {
+    // cons is a special case, because it updates an existing data structure. We explicitly
+    // want to avoid creating a new pair here; instead we want set the car and cdr fields to
+    // the new value, and return the existing pair. As far as the dataflow logic is concerned,
+    // the result of cons has not changed. Calls to car or cdr on the pair will, however,
+    // be triggered, as they have the pair as an input, and their evaluation will be triggered
+    // by the call to markDirty().
+    if (df && df.argNodes && df.existing && (df.existing.value instanceof PairValue)) {
+        if (df.argNodes.length !== 2)
+            throw new SchemeException(new StringValue("cons requires exactly two arguments"));
+        const newCar = df.argNodes[0].value;
+        const newCdr = df.argNodes[1].value;
+        const pair = df.existing.value;
+        if ((newCar !== pair.car) || (newCdr !== pair.cdr)) {
+            pair.car = newCar;
+            pair.cdr = newCdr;
+            df.existing.markDirty();
+        }
+        return pair;
+    }
 
-    const pair = new PairValue(args[0], args[1]);
-    return pair;
+    if (args.length !== 2)
+        throw new SchemeException(new StringValue("cons requires exactly two arguments"));
+
+    return new PairValue(args[0], args[1]);
 }
 
 function builtin_car(args: Value[]): Value {
