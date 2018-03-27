@@ -34,7 +34,6 @@ import {
     ApplyNode,
     VariableNode,
     LetrecNode,
-    bindLetrecValues,
 } from "./ast";
 
 const allInputs = new Map<string, InputDataflowNode>();
@@ -430,24 +429,42 @@ export class VariableDataflowNode extends DataflowNode {
     }
 }
 
+function bindLetrecNodes(nodes: DataflowNode[], letrecAst: LetrecNode, innerEnv: Environment): void {
+    for (let i = 0; i < nodes.length; i++) {
+        if (i >= letrecAst.bindings.length) { // sanity check
+            throw new Error("Invalid argument number: more than # bindings");
+        }
+        if (i >= letrecAst.innerScope.slots.length) { // sanity check
+            throw new Error("Invalid argument number: more than # slots");
+        }
+        const variable = innerEnv.getVar(i, letrecAst.bindings[i].ref.target.name, letrecAst.innerScope.slots[i]);
+        variable.node = nodes[i];
+    }
+}
+
 export class LetrecDataflowNode extends DataflowNode {
-    public constructor(public ast: LetrecNode, public env: Environment) {
+    private body: DataflowNode;
+
+    public constructor(ast: LetrecNode, env: Environment) {
         super();
 
-        const innerEnv = new Environment(this.ast.innerScope, this.env);
-        const bindingArray: Value[] = [];
-        for (const binding of this.ast.bindings)
-            bindingArray.push(binding.body.createDataflowNode(innerEnv).value);
-        bindLetrecValues(bindingArray, this.ast, innerEnv);
-        this.value = this.ast.body.createDataflowNode(innerEnv).value;
+        const innerEnv = new Environment(ast.innerScope, env);
+        const bindingArray: DataflowNode[] = [];
+        for (const binding of ast.bindings)
+            bindingArray.push(binding.body.createDataflowNode(innerEnv));
+        bindLetrecNodes(bindingArray, ast, innerEnv);
+
+        this.body = ast.body.createDataflowNode(innerEnv);
+        this.body.addOutput(this);
+        this.value = this.body.value;
     }
 
     public reevaluate(): void {
-        throw new Error("LetrecDataflowNode.reevaluate() not implemented");
+        this.updateValue(this.body.value);
     }
 
     public detach(): void {
-        throw new Error("LetrecDataflowNode.reevaluate() not implemented");
+        this.body.removeOutput(this);
     }
 }
 
