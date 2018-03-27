@@ -273,19 +273,23 @@ export class LambdaDataflowNode extends DataflowNode {
 }
 
 export class SequenceDataflowNode extends DataflowNode {
+    private next: DataflowNode;
+
     public constructor(public ast: SequenceNode, public env: Environment) {
         super();
 
         this.ast.body.createDataflowNode(this.env);
-        this.value = this.ast.next.createDataflowNode(this.env).value;
+        this.next = this.ast.next.createDataflowNode(this.env);
+        this.next.addOutput(this);
+        this.value = this.next.value;
     }
 
     public reevaluate(): void {
-        throw new Error("SequenceDataflowNode.reevaluate() not implemented");
+        this.updateValue(this.next.value);
     }
 
     public detach(): void {
-        throw new Error("SequenceDataflowNode.reevaluate() not implemented");
+        this.next.removeOutput(this);
     }
 }
 
