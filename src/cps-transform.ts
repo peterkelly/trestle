@@ -71,7 +71,8 @@ export function transformIf(form: IfForm, succ: SExpr): SExpr {
             cpsAlternative);
 
         if (succ instanceof SymbolExpr) {
-            return form.condition.cpsTransform(body);
+            return form.condition.cpsTransform(
+                extra.makeLambda(range, [sym], body));
         }
         else {
             return form.condition.cpsTransform(
