@@ -12,19 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { Value, NilValue } from "./value";
+import { Value, UnspecifiedValue } from "./value";
 import { LexicalSlot, LexicalScope, LexicalRef } from "./scope";
 import { BuildError } from "./sexpr";
 import { ErrorValue } from "./value";
 import { SourceRange } from "./source";
-import { EnvSlotDataflowNode } from "./dataflow";
+import { DataflowNode, EnvSlotDataflowNode } from "./dataflow";
 
 export type Continuation = (value: Value) => void;
 
 export class Variable {
     public _class_Variable: any;
     public slot: LexicalSlot;
-    public node: EnvSlotDataflowNode;
+    public node: DataflowNode;
     public constructor(slot: LexicalSlot, value: Value) {
         this.slot = slot;
         this.node = new EnvSlotDataflowNode();
@@ -44,13 +44,20 @@ export class Environment {
     public _class_Environment: any;
     public scope: LexicalScope;
     public outer: Environment | null;
-    private variables: Variable[];
-    public constructor(scope: LexicalScope, outer: Environment | null) {
+    public variables: Variable[];
+
+    public constructor(scope: LexicalScope, outer: Environment | null, values?: Value[]) {
         this.scope = scope;
         this.outer = outer;
         this.variables = [];
         for (let i = 0; i < scope.slots.length; i++)
-            this.variables.push(new Variable(scope.slots[i], NilValue.instance));
+            this.variables.push(new Variable(scope.slots[i], UnspecifiedValue.instance));
+        if (values !== undefined) {
+            if (values.length !== this.variables.length)
+                throw new Error("Incorrect number of variable values");
+            for (let i = 0; i < scope.slots.length; i++)
+                this.variables[i].value = values[i];
+        }
 
         if ((outer !== null) && (scope.outer !== null)) {
             if (outer.scope !== scope.outer) {
@@ -69,15 +76,18 @@ export class Environment {
         }
     }
 
-    public getVar(index: number, name: string, slot: LexicalSlot): Variable {
-        if ((index < 0) || (index >= this.variables.length))
-            throw new Error("getVar " + name + ": invalid index");
-        const variable = this.variables[index];
-        if (variable.slot.name !== name)
-            throw new Error("getVar " + name + ": name mismatch: expected " + name + ", actual " + variable.slot.name);
-        if (variable.slot !== slot)
-            throw new Error("getVar " + name + ": slot mismatch");
-        return variable;
+    public setVariableValues(values: Value[]): void {
+        if (values.length !== this.variables.length)
+            throw new Error("Incorrect number of variable values");
+        for (let i = 0; i < values.length; i++)
+            this.variables[i].value = values[i];
+    }
+
+    public setVariableDataflowNodes(nodes: DataflowNode[]): void {
+        if (nodes.length !== this.variables.length)
+            throw new Error("Incorrect number of variable nodes");
+        for (let i = 0; i < nodes.length; i++)
+            this.variables[i].node = nodes[i];
     }
 
     public resolveRef(ref: LexicalRef, range: SourceRange): Variable {
@@ -92,7 +102,7 @@ export class Environment {
             env = env.outer;
             curDepth++;
         }
-        return env.getVar(ref.index, ref.name, ref.target);
+        return env.variables[ref.index];
     }
 }
 

@@ -210,7 +210,7 @@ function main(): void {
                 if (ref === null) {
                     throw new Error("No reference for top-level variable " + name);
                 }
-                const variable = topLevelEnv.getVar(ref.index, ref.name, ref.target);
+                const variable = topLevelEnv.variables[ref.index];
                 if (options.cpsBuiltins && (ref.name !== "SUCC"))
                     variable.value = new BuiltinProcedureValue(name, wrapBuiltinCPS(fun));
                 else

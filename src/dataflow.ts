@@ -80,6 +80,7 @@ export function updateInput(name: string, value: Value): void {
 }
 
 export abstract class DataflowNode {
+    public readonly _class_DataflowNode: any;
     private static nextId = 0;
     private id: number;
     public value: Value = UnspecifiedValue.instance;
@@ -166,6 +167,8 @@ export abstract class DataflowNode {
 }
 
 export class EnvSlotDataflowNode extends DataflowNode {
+    public readonly _class_EnvSlotDataflowNode: any;
+
     public constructor() {
         super();
     }
@@ -180,6 +183,7 @@ export class EnvSlotDataflowNode extends DataflowNode {
 }
 
 export class ConstantDataflowNode extends DataflowNode {
+    public readonly _class_ConstantDataflowNode: any;
     public constructor(public ast: ConstantNode, public env: Environment) {
         super();
 
@@ -196,6 +200,8 @@ export class ConstantDataflowNode extends DataflowNode {
 }
 
 export class AssignDataflowNode extends DataflowNode {
+    public readonly _class_AssignDataflowNode: any;
+
     public constructor(public ast: AssignNode, public env: Environment) {
         super();
 
@@ -215,6 +221,7 @@ export class AssignDataflowNode extends DataflowNode {
 }
 
 export class IfDataflowNode extends DataflowNode {
+    public readonly _class_IfDataflowNode: any;
     private cond: DataflowNode;
     private isTrue: boolean;
     private branch: DataflowNode;
@@ -257,6 +264,8 @@ export class IfDataflowNode extends DataflowNode {
 }
 
 export class LambdaDataflowNode extends DataflowNode {
+    public readonly _class_LambdaDataflowNode: any;
+
     public constructor(public ast: LambdaNode, public env: Environment) {
         super();
 
@@ -273,6 +282,7 @@ export class LambdaDataflowNode extends DataflowNode {
 }
 
 export class SequenceDataflowNode extends DataflowNode {
+    public readonly _class_SequenceDataflowNode: any;
     private next: DataflowNode;
 
     public constructor(public ast: SequenceNode, public env: Environment) {
@@ -294,6 +304,8 @@ export class SequenceDataflowNode extends DataflowNode {
 }
 
 export class BuiltinCallDataflowNode extends DataflowNode {
+    public readonly _class_BuiltinCallDataflowNode: any;
+
     public constructor(private procValue: BuiltinProcedureValue, private args: DataflowNode[]) {
         super();
         for (const arg of this.args)
@@ -321,21 +333,6 @@ export class BuiltinCallDataflowNode extends DataflowNode {
     }
 }
 
-function bindLambdaArgumentNodes(args: DataflowNode[], lambdaNode: LambdaNode, outerEnv: Environment): Environment {
-    const innerEnv = new Environment(lambdaNode.innerScope, outerEnv);
-    for (let i = 0; i < args.length; i++) {
-        if (i >= lambdaNode.variables.length) { // sanity check
-            throw new Error("Invalid argument number: more than # variables");
-        }
-        if (i >= lambdaNode.innerScope.slots.length) { // sanity check
-            throw new Error("Invalid argument number: more than # slots");
-        }
-        const variable = innerEnv.getVar(i, lambdaNode.variables[i], lambdaNode.innerScope.slots[i]);
-        variable.node = args[i];
-    }
-    return innerEnv;
-}
-
 function createLambdaCallNode(procValue: LambdaProcedureValue, args: DataflowNode[], range: SourceRange): DataflowNode {
     const outerEnv = procValue.env;
     const lambdaNode = procValue.proc;
@@ -348,7 +345,8 @@ function createLambdaCallNode(procValue: LambdaProcedureValue, args: DataflowNod
         throw new SchemeException(new ErrorValue(error));
     }
 
-    const innerEnv = bindLambdaArgumentNodes(args, lambdaNode, outerEnv);
+    const innerEnv = new Environment(lambdaNode.innerScope, outerEnv);
+    innerEnv.setVariableDataflowNodes(args);
     return procValue.proc.body.createDataflowNode(innerEnv);
 }
 
@@ -367,6 +365,7 @@ function createCallNode(procValue: Value, args: DataflowNode[], range: SourceRan
 }
 
 export class ApplyDataflowNode extends DataflowNode {
+    public readonly _class_ApplyDataflowNode: any;
     private proc: DataflowNode;
     private procValue: Value;
     private call: DataflowNode;
@@ -414,6 +413,7 @@ export class ApplyDataflowNode extends DataflowNode {
 }
 
 export class VariableDataflowNode extends DataflowNode {
+    public readonly _class_VariableDataflowNode: any;
     private node: DataflowNode;
 
     public constructor(public ast: VariableNode, public env: Environment) {
@@ -433,20 +433,8 @@ export class VariableDataflowNode extends DataflowNode {
     }
 }
 
-function bindLetrecNodes(nodes: DataflowNode[], letrecAst: LetrecNode, innerEnv: Environment): void {
-    for (let i = 0; i < nodes.length; i++) {
-        if (i >= letrecAst.bindings.length) { // sanity check
-            throw new Error("Invalid argument number: more than # bindings");
-        }
-        if (i >= letrecAst.innerScope.slots.length) { // sanity check
-            throw new Error("Invalid argument number: more than # slots");
-        }
-        const variable = innerEnv.getVar(i, letrecAst.bindings[i].ref.target.name, letrecAst.innerScope.slots[i]);
-        variable.node = nodes[i];
-    }
-}
-
 export class LetrecDataflowNode extends DataflowNode {
+    public readonly _class_LetrecDataflowNode: any;
     private body: DataflowNode;
 
     public constructor(ast: LetrecNode, env: Environment) {
@@ -456,7 +444,7 @@ export class LetrecDataflowNode extends DataflowNode {
         const bindingArray: DataflowNode[] = [];
         for (const binding of ast.bindings)
             bindingArray.push(binding.body.createDataflowNode(innerEnv));
-        bindLetrecNodes(bindingArray, ast, innerEnv);
+        innerEnv.setVariableDataflowNodes(bindingArray);
 
         this.body = ast.body.createDataflowNode(innerEnv);
         this.body.addOutput(this);
@@ -473,6 +461,8 @@ export class LetrecDataflowNode extends DataflowNode {
 }
 
 export class InputDataflowNode extends DataflowNode {
+    public readonly _class_InputDataflowNode: any;
+
     public constructor(initialValue: Value) {
         super();
         this.value = initialValue;

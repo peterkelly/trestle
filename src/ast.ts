@@ -437,7 +437,7 @@ export class ApplyNode extends ASTBaseNode {
             return;
         }
 
-        const innerEnv = bindLambdaArguments(argArray, lambdaNode, outerEnv);
+        const innerEnv = new Environment(lambdaNode.innerScope, outerEnv, argArray);
         procValue.proc.body.evalCps(innerEnv, succeed, fail);
     }
 
@@ -479,24 +479,9 @@ export class ApplyNode extends ASTBaseNode {
             throw new SchemeException(new ErrorValue(error));
         }
 
-        const innerEnv = bindLambdaArguments(argArray, lambdaNode, outerEnv);
+        const innerEnv = new Environment(lambdaNode.innerScope, outerEnv, argArray);
         return procValue.proc.body.evalDirect(innerEnv);
     }
-}
-
-export function bindLambdaArguments(argArray: Value[], lambdaNode: LambdaNode, outerEnv: Environment): Environment {
-    const innerEnv = new Environment(lambdaNode.innerScope, outerEnv);
-    for (let i = 0; i < argArray.length; i++) {
-        if (i >= lambdaNode.variables.length) { // sanity check
-            throw new Error("Invalid argument number: more than # variables");
-        }
-        if (i >= lambdaNode.innerScope.slots.length) { // sanity check
-            throw new Error("Invalid argument number: more than # slots");
-        }
-        const variable = innerEnv.getVar(i, lambdaNode.variables[i], lambdaNode.innerScope.slots[i]);
-        variable.value = argArray[i];
-    }
-    return innerEnv;
 }
 
 export class VariableNode extends ASTBaseNode {
@@ -585,7 +570,7 @@ export class LetrecNode extends ASTBaseNode {
 
     public evalCpsBody(bindingList: Value, innerEnv: Environment, succeed: Continuation, fail: Continuation): void {
         const bindingArray = backwardsListToArray(bindingList);
-        bindLetrecValues(bindingArray, this, innerEnv);
+        innerEnv.setVariableValues(bindingArray);
         this.body.evalCps(innerEnv, succeed, fail);
     }
 
@@ -595,7 +580,7 @@ export class LetrecNode extends ASTBaseNode {
         const bindingArray: Value[] = [];
         for (const binding of this.bindings)
             bindingArray.push(binding.body.evalDirect(innerEnv));
-        bindLetrecValues(bindingArray, this, innerEnv);
+        innerEnv.setVariableValues(bindingArray);
         return this.body.evalDirect(innerEnv);
     }
 
@@ -627,19 +612,6 @@ export class InputNode extends ASTBaseNode {
 
     public createDataflowNode(env: Environment): DataflowNode {
         return getInput(this.name);
-    }
-}
-
-export function bindLetrecValues(values: Value[], letrecNode: LetrecNode, innerEnv: Environment): void {
-    for (let i = 0; i < values.length; i++) {
-        if (i >= letrecNode.bindings.length) { // sanity check
-            throw new Error("Invalid argument number: more than # bindings");
-        }
-        if (i >= letrecNode.innerScope.slots.length) { // sanity check
-            throw new Error("Invalid argument number: more than # slots");
-        }
-        const variable = innerEnv.getVar(i, letrecNode.bindings[i].ref.target.name, letrecNode.innerScope.slots[i]);
-        variable.value = values[i];
     }
 }
 
