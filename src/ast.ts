@@ -31,6 +31,19 @@ import {
     LetrecDataflowNode,
 } from "./dataflow";
 
+export type ASTNode =
+    ConstantNode |
+    TryNode |
+    ThrowNode |
+    AssignNode |
+    IfNode |
+    LambdaNode |
+    SequenceNode |
+    ApplyNode |
+    VariableNode |
+    LetrecNode |
+    InputNode;
+
 let evalDirectEnabled = true;
 
 // This function is called when running in reactive evaluation mode. It's a sanity check to
@@ -39,9 +52,9 @@ export function disableEvalDirect(): void {
     evalDirectEnabled = false;
 }
 
-export abstract class ASTNode {
-    public _class_ASTNode: any;
-    public range: SourceRange;
+export abstract class ASTBaseNode {
+    public readonly _class_ASTBaseNode: any;
+    public readonly range: SourceRange;
 
     public constructor(range: SourceRange) {
         this.range = range;
@@ -61,9 +74,11 @@ export abstract class ASTNode {
     }
 }
 
-export class ConstantNode extends ASTNode {
-    public _class_ConstantNode: any;
-    public value: SExpr;
+export class ConstantNode extends ASTBaseNode {
+    public readonly _class_ConstantNode: any;
+    public readonly kind: "constant" = "constant";
+    public readonly value: SExpr;
+
     public constructor(range: SourceRange, value: SExpr) {
         super(range);
         this.value = value;
@@ -88,10 +103,11 @@ export class ConstantNode extends ASTNode {
     }
 }
 
-export class TryNode extends ASTNode {
-    public _class_TryNode: any;
-    public tryBody: ASTNode;
-    public catchBody: LambdaNode;
+export class TryNode extends ASTBaseNode {
+    public readonly  _class_TryNode: any;
+    public readonly kind: "try" = "try";
+    public readonly tryBody: ASTNode;
+    public readonly catchBody: LambdaNode;
 
     public constructor(range: SourceRange, tryBody: ASTNode, catchBody: LambdaNode) {
         super(range);
@@ -142,9 +158,10 @@ export class TryNode extends ASTNode {
     }
 }
 
-export class ThrowNode extends ASTNode {
-    public _class_ThrowNode: any;
-    public body: ASTNode;
+export class ThrowNode extends ASTBaseNode {
+    public readonly _class_ThrowNode: any;
+    public readonly kind: "throw" = "throw";
+    public readonly body: ASTNode;
 
     public constructor(range: SourceRange, body: ASTNode) {
         super(range);
@@ -175,10 +192,12 @@ export class ThrowNode extends ASTNode {
     }
 }
 
-export class AssignNode extends ASTNode {
-    public _class_AssignNode: any;
-    public ref: LexicalRef;
-    public body: ASTNode;
+export class AssignNode extends ASTBaseNode {
+    public readonly _class_AssignNode: any;
+    public readonly kind: "assign" = "assign";
+    public readonly ref: LexicalRef;
+    public readonly body: ASTNode;
+
     public constructor(range: SourceRange, ref: LexicalRef, body: ASTNode) {
         super(range);
         this.ref = ref;
@@ -212,8 +231,9 @@ export class AssignNode extends ASTNode {
     }
 }
 
-export class IfNode extends ASTNode {
-    public _class_IfNode: any;
+export class IfNode extends ASTBaseNode {
+    public readonly _class_IfNode: any;
+    public readonly kind: "if" = "if";
 
     public constructor(
         range: SourceRange,
@@ -272,8 +292,9 @@ export class LambdaProcedureValue extends Value {
     }
 }
 
-export class LambdaNode extends ASTNode {
-    public _class_LambdaNode: any;
+export class LambdaNode extends ASTBaseNode {
+    public readonly _class_LambdaNode: any;
+    public readonly kind: "lambda" = "lambda";
     public readonly variables: string[];
     public readonly innerScope: LexicalScope;
     public readonly body: ASTNode;
@@ -304,10 +325,11 @@ export class LambdaNode extends ASTNode {
     }
 }
 
-export class SequenceNode extends ASTNode {
-    public _class_SequenceNode: any;
-    public body: ASTNode;
-    public next: ASTNode;
+export class SequenceNode extends ASTBaseNode {
+    public readonly _class_SequenceNode: any;
+    public readonly kind: "sequence" = "sequence";
+    public readonly body: ASTNode;
+    public readonly next: ASTNode;
 
     public constructor(range: SourceRange, body: ASTNode, next: ASTNode) {
         super(range);
@@ -343,10 +365,11 @@ export class SequenceNode extends ASTNode {
     }
 }
 
-export class ApplyNode extends ASTNode {
-    public _class_ApplyNode: any;
-    public proc: ASTNode;
-    public args: ASTNode[];
+export class ApplyNode extends ASTBaseNode {
+    public readonly _class_ApplyNode: any;
+    public readonly kind: "apply" = "apply";
+    public readonly proc: ASTNode;
+    public readonly args: ASTNode[];
 
     public constructor(range: SourceRange, proc: ASTNode, args: ASTNode[]) {
         super(range);
@@ -476,9 +499,10 @@ export function bindLambdaArguments(argArray: Value[], lambdaNode: LambdaNode, o
     return innerEnv;
 }
 
-export class VariableNode extends ASTNode {
-    public _class_VariableNode: any;
-    public ref: LexicalRef;
+export class VariableNode extends ASTBaseNode {
+    public readonly _class_VariableNode: any;
+    public readonly kind: "variable" = "variable";
+    public readonly ref: LexicalRef;
 
     public constructor(range: SourceRange, ref: LexicalRef) {
         super(range);
@@ -517,11 +541,12 @@ export interface LetrecBinding {
     body: ASTNode;
 }
 
-export class LetrecNode extends ASTNode {
-    public _class_LetrecNode: any;
-    public innerScope: LexicalScope;
-    public bindings: LetrecBinding[];
-    public body: ASTNode;
+export class LetrecNode extends ASTBaseNode {
+    public readonly _class_LetrecNode: any;
+    public readonly kind: "letrec" = "letrec";
+    public readonly innerScope: LexicalScope;
+    public readonly bindings: LetrecBinding[];
+    public readonly body: ASTNode;
 
     public constructor(range: SourceRange, innerScope: LexicalScope, bindings: LetrecBinding[], body: ASTNode) {
         super(range);
@@ -579,8 +604,10 @@ export class LetrecNode extends ASTNode {
     }
 }
 
-export class InputNode extends ASTNode {
-    public _class_InputNode: any;
+export class InputNode extends ASTBaseNode {
+    public readonly _class_InputNode: any;
+    public readonly kind: "input" = "input";
+
     public constructor(range: SourceRange, public name: string) {
         super(range);
     }
