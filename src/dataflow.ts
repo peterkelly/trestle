@@ -25,6 +25,7 @@ import {
     ErrorValue,
 } from "./value";
 import {
+    ASTNode,
     ConstantNode,
     AssignNode,
     IfNode,
@@ -205,7 +206,7 @@ export class AssignDataflowNode extends DataflowNode {
     public constructor(public ast: AssignNode, public env: Environment) {
         super();
 
-        const node = this.ast.body.createDataflowNode(env);
+        const node = createDataflowNode(this.ast.body, env);
         const variable = env.resolveRef(this.ast.ref, this.ast.range);
         variable.node = node;
         this.value = UnspecifiedValue.instance;
@@ -229,14 +230,14 @@ export class IfDataflowNode extends DataflowNode {
     public constructor(public ast: IfNode, public env: Environment) {
         super();
 
-        this.cond = this.ast.condition.createDataflowNode(this.env);
+        this.cond = createDataflowNode(this.ast.condition, this.env);
         this.cond.addOutput(this);
         this.isTrue = this.cond.value.isTrue();
 
         if (this.isTrue)
-            this.branch = this.ast.consequent.createDataflowNode(this.env);
+            this.branch = createDataflowNode(this.ast.consequent, this.env);
         else
-            this.branch = this.ast.alternative.createDataflowNode(this.env);
+            this.branch = createDataflowNode(this.ast.alternative, this.env);
         this.branch.addOutput(this);
         this.value = this.branch.value;
     }
@@ -247,9 +248,9 @@ export class IfDataflowNode extends DataflowNode {
             this.branch.removeOutput(this);
             this.isTrue = this.cond.value.isTrue();
             if (this.isTrue)
-                this.branch = this.ast.consequent.createDataflowNode(this.env);
+                this.branch = createDataflowNode(this.ast.consequent, this.env);
             else
-                this.branch = this.ast.alternative.createDataflowNode(this.env);
+                this.branch = createDataflowNode(this.ast.alternative, this.env);
             this.branch.addOutput(this);
             this.markOutputsAsDirty();
         }
@@ -288,8 +289,8 @@ export class SequenceDataflowNode extends DataflowNode {
     public constructor(public ast: SequenceNode, public env: Environment) {
         super();
 
-        this.ast.body.createDataflowNode(this.env);
-        this.next = this.ast.next.createDataflowNode(this.env);
+        createDataflowNode(this.ast.body, this.env);
+        this.next = createDataflowNode(this.ast.next, this.env);
         this.next.addOutput(this);
         this.value = this.next.value;
     }
@@ -347,7 +348,7 @@ function createLambdaCallNode(procValue: LambdaProcedureValue, args: DataflowNod
 
     const innerEnv = new Environment(lambdaNode.innerScope, outerEnv);
     innerEnv.setVariableDataflowNodes(args);
-    return procValue.proc.body.createDataflowNode(innerEnv);
+    return createDataflowNode(procValue.proc.body, innerEnv);
 }
 
 function createCallNode(procValue: Value, args: DataflowNode[], range: SourceRange): DataflowNode {
@@ -374,10 +375,10 @@ export class ApplyDataflowNode extends DataflowNode {
     public constructor(public ast: ApplyNode, public env: Environment) {
         super();
 
-        this.proc = this.ast.proc.createDataflowNode(this.env);
+        this.proc = createDataflowNode(this.ast.proc, this.env);
         this.proc.addOutput(this);
         this.procValue = this.proc.value;
-        this.args = this.ast.args.map(arg => arg.createDataflowNode(this.env));
+        this.args = this.ast.args.map(arg => createDataflowNode(arg, this.env));
 
         this.call = createCallNode(this.procValue, this.args, this.ast.range);
         this.call.addOutput(this);
@@ -443,10 +444,10 @@ export class LetrecDataflowNode extends DataflowNode {
         const innerEnv = new Environment(ast.innerScope, env);
         const bindingArray: DataflowNode[] = [];
         for (const binding of ast.bindings)
-            bindingArray.push(binding.body.createDataflowNode(innerEnv));
+            bindingArray.push(createDataflowNode(binding.body, innerEnv));
         innerEnv.setVariableDataflowNodes(bindingArray);
 
-        this.body = ast.body.createDataflowNode(innerEnv);
+        this.body = createDataflowNode(ast.body, innerEnv);
         this.body.addOutput(this);
         this.value = this.body.value;
     }
@@ -474,5 +475,32 @@ export class InputDataflowNode extends DataflowNode {
 
     public detach(): void {
         // Nothing to do here
+    }
+}
+
+export function createDataflowNode(node: ASTNode, env: Environment): DataflowNode {
+    switch (node.kind) {
+        case "constant":
+            return new ConstantDataflowNode(node, env);
+        case "try":
+            throw new BuildError(node.range, "Exceptions are unsupported in reactive evaluation mode");
+        case "throw":
+            throw new BuildError(node.range, "Exceptions are unsupported in reactive evaluation mode");
+        case "assign":
+            return new AssignDataflowNode(node, env);
+        case "if":
+            return new IfDataflowNode(node, env);
+        case "lambda":
+            return new LambdaDataflowNode(node, env);
+        case "sequence":
+            return new SequenceDataflowNode(node, env);
+        case "apply":
+            return new ApplyDataflowNode(node, env);
+        case "variable":
+            return new VariableDataflowNode(node, env);
+        case "letrec":
+            return new LetrecDataflowNode(node, env);
+        case "input":
+            return getInput(node.name);
     }
 }

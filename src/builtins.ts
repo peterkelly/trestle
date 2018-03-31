@@ -25,8 +25,9 @@ import {
     UnspecifiedValue,
 } from "./value";
 import { Continuation, SchemeException } from "./runtime";
-import { LambdaProcedureValue, ApplyNode } from "./ast";
+import { LambdaProcedureValue } from "./ast";
 import { DataflowCallInfo } from "./dataflow";
+import { evalLambdaDirect } from "./eval-direct";
 
 export type BuiltinDirect = (args: Value[], df?: DataflowCallInfo) => Value;
 export type BuiltinProcedure = (args: Value[], succeed: Continuation, fail: Continuation) => void;
@@ -425,7 +426,7 @@ export function wrapBuiltinCPS(fun: BuiltinDirect): BuiltinDirect {
             }
             else if (cont instanceof LambdaProcedureValue) {
                 const directResult = fun(directArgs);
-                return ApplyNode.evalLambdaDirect(cont, [directResult], cont.proc.range);
+                return evalLambdaDirect(cont, [directResult], cont.proc.range);
             }
             else {
                 throw new Error("Expected continuation to be a procedure, is " + cont);

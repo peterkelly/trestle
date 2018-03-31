@@ -21,12 +21,9 @@ import { Environment, SchemeException } from "./runtime";
 import { Value, NumberValue, ErrorValue } from "./value";
 import { BuiltinProcedureValue, builtins, wrapBuiltinCPS } from "./builtins";
 import { simplify } from "./simplify";
-import { disableEvalDirect } from "./ast";
-import { createInput, updateInput, reevaluateDataflowGraph } from "./dataflow";
-
-// console.log("Hello World");
-// const p = new Parser("(test 1 2 3)");
-// console.log(p);
+import { evalDirect, disableEvalDirect } from "./eval-direct";
+import { evalCps } from "./eval-cps";
+import { createInput, updateInput, reevaluateDataflowGraph, createDataflowNode } from "./dataflow";
 
 function showBuildError(e: BuildError, filename: string, input: string): void {
     const sinput = new SourceInput(input);
@@ -219,7 +216,7 @@ function main(): void {
 
             if (options.evalKind === EvalKind.Direct) {
                 try {
-                    const value = built.evalDirect(topLevelEnv);
+                    const value = evalDirect(built, topLevelEnv);
                     console.log("DIRECT Success: " + value);
                 }
                 catch (e) {
@@ -227,7 +224,7 @@ function main(): void {
                 }
             }
             else if (options.evalKind === EvalKind.CPS) {
-                built.evalCps(topLevelEnv,
+                evalCps(built, topLevelEnv,
                     // success continuation
                     (value: Value): void => {
                         console.log("CPS Success: " + value);
@@ -247,7 +244,7 @@ function main(): void {
 
                     Value.currentGeneration = counter;
                     createInput("test", new NumberValue(counter));
-                    const resultNode = built.createDataflowNode(topLevelEnv);
+                    const resultNode = createDataflowNode(built, topLevelEnv);
                     resultNode.dump("  * ");
                     console.log("" + resultNode.value);
 
