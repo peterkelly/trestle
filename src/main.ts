@@ -288,7 +288,7 @@ function main(): void {
                     console.log("");
                     Value.currentGeneration = counter;
                     createInput("test", new NumberValue(counter));
-                    const resultCell = evalTracing(built, topLevelEnv);
+                    const resultCell = evalTracing(built, topLevelEnv, null);
                     resultCell.dump();
                     console.log("" + resultCell.value);
 

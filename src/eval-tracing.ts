@@ -18,7 +18,7 @@ export interface WriteIem {
 
 export interface CellItem {
     kind: "cell";
-    cell: SimpleCell;
+    cell: Cell;
 }
 
 export interface CellWriter {
@@ -32,10 +32,15 @@ export abstract class Cell {
     public value: Value;
     public items: TraceItem[] = [];
     public abstract name: string;
-    public parent: Cell | null;
+    public readonly parent: Cell | null;
 
     public constructor(parent: Cell | null, value?: Value) {
         this.parent = parent;
+        if (this.parent !== null)
+            this.parent.items.push({
+                kind: "cell",
+                cell: this,
+            });
         if (value !== undefined)
             this.value = value;
         else
@@ -48,12 +53,12 @@ export abstract class Cell {
             let childPrefix: string;
             let childIndent: string;
             if (i + 1 < this.items.length) {
-                childPrefix = "|-- ";
-                childIndent = "|   ";
+                childPrefix = indent + "├─ ";
+                childIndent = indent + "│   ";
             }
             else {
-                childPrefix = "\-- ";
-                childIndent = "    ";
+                childPrefix = indent + "└── ";
+                childIndent = indent + "    ";
             }
             const item = this.items[i];
             switch (item.kind) {
@@ -235,10 +240,12 @@ export class InputCell extends Cell {
 
 
 
-export function evalTracing(node: ASTNode, env: Environment): SimpleCell {
+export function evalTracing(node: ASTNode, env: Environment, parent: Cell | null): Cell {
     switch (node.kind) {
         case "constant": {
-            return new SimpleCell(node.value.toValue());
+            const cell = new ConstantCell(parent);
+            cell.value = node.value.toValue();
+            return cell;
         }
         case "try": {
             throw new Error("Exceptions are not supported in tracing evaluation mode");
@@ -247,91 +254,107 @@ export function evalTracing(node: ASTNode, env: Environment): SimpleCell {
             throw new Error("Exceptions are not supported in tracing evaluation mode");
         }
         case "assign": {
-            const valueCell = evalTracing(node.body, env);
+            const cell = new AssignCell(parent);
+
+            const valueCell = evalTracing(node.body, env, cell);
             const value = valueCell.value;
             const variable = env.resolveRef(node.ref, node.range);
             variable.value = value;
-            return new SimpleCell(UnspecifiedValue.instance);
+            return cell;
         }
         case "if": {
-            const condValueCell = evalTracing(node.condition, env);
+            const cell = new IfCell(parent);
+            const condValueCell = evalTracing(node.condition, env, cell);
             const condValue = condValueCell.value;
             if (condValue.isTrue()) {
-                const branchCell = evalTracing(node.consequent, env);
+                const branchCell = evalTracing(node.consequent, env, cell);
                 const branchValue = branchCell.value;
-                return new SimpleCell(branchValue);
+                cell.value = branchValue;
             }
             else {
-                const branchCell = evalTracing(node.alternative, env);
+                const branchCell = evalTracing(node.alternative, env, cell);
                 const branchValue = branchCell.value;
-                return new SimpleCell(branchValue);
+                cell.value = branchValue;
             }
+            return cell;
         }
         case "lambda": {
-            const result = new LambdaProcedureValue(env, node);
-            return new SimpleCell(result);
+            const cell = new LambdaCell(parent);
+            cell.value = new LambdaProcedureValue(env, node);
+            return cell;
         }
         case "sequence": {
-            const ignoreCell = evalTracing(node.body, env);
+            const cell = new SequenceCell(parent);
+            const ignoreCell = evalTracing(node.body, env, cell);
             void ignoreCell;
-            const resultCell = evalTracing(node.next, env);
+            const resultCell = evalTracing(node.next, env, cell);
             const resultValue = resultCell.value;
-            return new SimpleCell(resultValue);
+            cell.value = resultValue;
+            return cell;
         }
         case "apply": {
-            const procCell = evalTracing(node.proc, env);
+            const cell = new ApplyCell(parent);
+            const procCell = evalTracing(node.proc, env, cell);
             const procValue = procCell.value;
             const argArray: Value[] = [];
             for (let i = 0; i < node.args.length; i++) {
                 const arg = node.args[i];
-                const argCell = evalTracing(arg, env);
+                const argCell = evalTracing(arg, env, cell);
                 const argValue = argCell.value;
                 argArray.push(argValue);
             }
 
             if (procValue instanceof BuiltinProcedureValue) {
                 const resultValue = procValue.direct(argArray);
-                return new SimpleCell(resultValue);
+                cell.value = resultValue;
             }
             else if (procValue instanceof LambdaProcedureValue) {
-                const resultCell = evalLambdaTracing(procValue, argArray, node.range);
+                const resultCell = evalLambdaTracing(procValue, argArray, node.range, cell);
                 const resultValue = resultCell.value;
-                return new SimpleCell(resultValue);
+                cell.value = resultValue;
             }
             else {
                 const msg = "Cannot apply " + procValue;
                 const error = new BuildError(node.range, msg);
                 throw new SchemeException(new ErrorValue(error));
             }
+            return cell;
         }
         case "variable": {
+            const cell = new VariableCell(parent);
             const variable = env.resolveRef(node.ref, node.range);
             const value = variable.value;
-            return new SimpleCell(value);
+            cell.value = value;
+            return cell;
         }
         case "letrec": {
+            const cell = new LetrecCell(parent);
             const innerEnv = new Environment(node.innerScope, env);
             const bindingArray: Value[] = [];
             for (const binding of node.bindings) {
-                const varCell = evalTracing(binding.body, innerEnv);
+                const varCell = evalTracing(binding.body, innerEnv, cell);
                 const varValue = varCell.value;
                 bindingArray.push(varValue);
             }
             innerEnv.setVariableValues(bindingArray);
-            const bodyCell = evalTracing(node.body, innerEnv);
+            const bodyCell = evalTracing(node.body, innerEnv, cell);
             const bodyValue = bodyCell.value;
-            return new SimpleCell(bodyValue);
+            cell.value = bodyValue;
+            return cell;
         }
         case "input": {
+            const cell = new InputCell(parent);
             const inputDataflowNode = getInput(node.name);
-            return new SimpleCell(inputDataflowNode.value);
+            cell.value = inputDataflowNode.value;
+            return cell;
         }
     }
 }
 
-export function evalLambdaTracing(procValue: LambdaProcedureValue, argArray: Value[], range: SourceRange): SimpleCell {
+export function evalLambdaTracing(procValue: LambdaProcedureValue, argArray: Value[], range: SourceRange, parent: Cell): Cell {
     const outerEnv = procValue.env;
     const lambdaNode = procValue.proc;
+    const cell = new LambdaCell(parent);
 
     const expectedArgCount = lambdaNode.variables.length;
     const actualArgCount = argArray.length;
@@ -342,5 +365,8 @@ export function evalLambdaTracing(procValue: LambdaProcedureValue, argArray: Val
     }
 
     const innerEnv = new Environment(lambdaNode.innerScope, outerEnv, argArray);
-    return evalTracing(procValue.proc.body, innerEnv);
+    const bodyCell = evalTracing(procValue.proc.body, innerEnv, cell);
+    const bodyValue = bodyCell.value;
+    cell.value = bodyValue;
+    return cell;
 }
