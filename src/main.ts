@@ -22,6 +22,7 @@ import { Value, NumberValue, ErrorValue } from "./value";
 import { BuiltinProcedureValue, builtins, wrapBuiltinCPS } from "./builtins";
 import { simplify } from "./simplify";
 import { evalDirect, disableEvalDirect } from "./eval-direct";
+import { evalTracing } from "./eval-tracing";
 import { evalCps } from "./eval-cps";
 import { createInput, updateInput, reevaluateDataflowGraph, createDataflowNode } from "./dataflow";
 
@@ -58,6 +59,7 @@ enum EvalKind {
     Direct,
     CPS,
     Reactive,
+    Tracing,
 }
 
 enum Transformations {
@@ -95,6 +97,9 @@ function parseCommandLineOptions(args: string[]): Options {
             }
             else if (args[argno] === "--eval-reactive") {
                 options.evalKind = EvalKind.Reactive;
+            }
+            else if (args[argno] === "--eval-tracing") {
+                options.evalKind = EvalKind.Tracing;
             }
             else if (args[argno] === "--test") {
                 options.testCoordsOnly = true;
@@ -265,6 +270,16 @@ function main(): void {
                 }
                 catch (e) {
                     showError("REACTIVE Failure: ", e, filename, input);
+                }
+            }
+            else if (options.evalKind === EvalKind.Tracing) {
+                try {
+                    disableEvalDirect();
+                    const rootCell = evalTracing(built, topLevelEnv);
+                    console.log("TRACING Success: " + rootCell.value);
+                }
+                catch (e) {
+                    showError("TRACING Failure: ", e, filename, input);
                 }
             }
         }
