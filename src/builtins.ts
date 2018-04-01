@@ -112,7 +112,7 @@ function num_divide(args: number[]): number {
 
     let total = args[0];
     for (let i = 1; i < args.length; i++)
-        total -= args[i];
+        total /= args[i];
     return total;
 }
 
