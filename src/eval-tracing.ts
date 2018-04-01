@@ -2,15 +2,84 @@ import { ASTNode, LambdaProcedureValue } from "./ast";
 import { BuildError } from "./sexpr";
 import { SourceRange } from "./source";
 import { Value, ErrorValue, UnspecifiedValue } from "./value";
-import { Environment, SchemeException } from "./runtime";
+import { Variable, Environment, SchemeException } from "./runtime";
 import { BuiltinProcedureValue } from "./builtins";
+import { getInput } from "./dataflow";
 
-export class SimpleCell {
+export interface ReadItem {
+    kind: "read";
+    variable: Variable;
+}
+
+export interface WriteIem {
+    kind: "write";
+    variable: Variable;
+}
+
+export interface CellItem {
+    kind: "cell";
+    cell: SimpleCell;
+}
+
+export interface CellWriter {
+    println(msg: string): void;
+}
+
+export type TraceItem = ReadItem | WriteIem | CellItem;
+
+export abstract class Cell {
     public readonly _class_Cell: any;
-    public readonly value: Value;
+    public value: Value;
+    public items: TraceItem[] = [];
+
+    public constructor(value?: Value) {
+        if (value !== undefined)
+            this.value = value;
+        else
+            this.value = UnspecifiedValue.instance;
+    }
+
+    public write(writer: CellWriter, prefix: string, indent: string): void {
+        writer.println(prefix + (<any> this.value).constructor.name);
+        for (let i = 0; i < this.items.length; i++) {
+            let childPrefix: string;
+            let childIndent: string;
+            if (i + 1 < this.items.length) {
+                childPrefix = "|-- ";
+                childIndent = "|   ";
+            }
+            else {
+                childPrefix = "\-- ";
+                childIndent = "    ";
+            }
+            const item = this.items[i];
+            switch (item.kind) {
+                case "read":
+                    writer.println(childPrefix + " read " + item.variable.slot.name);
+                    break;
+                case "write":
+                    writer.println(childPrefix + " write " + item.variable.slot.name);
+                    break;
+                case "cell":
+                    item.cell.write(writer, childPrefix, childIndent);
+                    break;
+            }
+        }
+    }
+
+    public dump(): void {
+        const writer: CellWriter = {
+            println: (msg: string): void => console.log(msg),
+        };
+        this.write(writer, "", "");
+    }
+}
+
+export class SimpleCell extends Cell {
+    public readonly _class_SimpleCell: any;
 
     public constructor(value: Value) {
-        this.value = value;
+        super(value);
     }
 }
 
@@ -102,7 +171,8 @@ export function evalTracing(node: ASTNode, env: Environment): SimpleCell {
             return new SimpleCell(bodyValue);
         }
         case "input": {
-            throw new BuildError(node.range, "InputNode.evalDirect() not implemented");
+            const inputDataflowNode = getInput(node.name);
+            return new SimpleCell(inputDataflowNode.value);
         }
     }
 }

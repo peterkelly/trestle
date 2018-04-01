@@ -274,9 +274,39 @@ function main(): void {
             }
             else if (options.evalKind === EvalKind.Tracing) {
                 try {
+                    // disableEvalDirect();
+                    // const counter = 0;
+                    // createInput("test", new NumberValue(counter));
+                    // const rootCell = evalTracing(built, topLevelEnv);
+                    // console.log("TRACING Success: " + rootCell.value);
+
+
+
                     disableEvalDirect();
-                    const rootCell = evalTracing(built, topLevelEnv);
-                    console.log("TRACING Success: " + rootCell.value);
+                    let counter = 0;
+
+                    console.log("");
+                    Value.currentGeneration = counter;
+                    createInput("test", new NumberValue(counter));
+                    const resultCell = evalTracing(built, topLevelEnv);
+                    resultCell.dump();
+                    console.log("" + resultCell.value);
+
+                    setInterval(() => {
+                        try {
+                            console.log("");
+                            counter++;
+                            Value.currentGeneration = counter;
+                            updateInput("test", new NumberValue(counter));
+                            // reevaluateDataflowGraph();
+                            resultCell.dump();
+                            console.log("" + resultCell.value.toStringWithOptions({ generation: Value.currentGeneration }));
+                        }
+                        catch (e) {
+                            console.error("" + e);
+                            console.error(e);
+                        }
+                    }, 1000);
                 }
                 catch (e) {
                     showError("TRACING Failure: ", e, filename, input);
