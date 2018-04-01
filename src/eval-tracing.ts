@@ -31,8 +31,11 @@ export abstract class Cell {
     public readonly _class_Cell: any;
     public value: Value;
     public items: TraceItem[] = [];
+    public abstract name: string;
+    public parent: Cell | null;
 
-    public constructor(value?: Value) {
+    public constructor(parent: Cell | null, value?: Value) {
+        this.parent = parent;
         if (value !== undefined)
             this.value = value;
         else
@@ -40,7 +43,7 @@ export abstract class Cell {
     }
 
     public write(writer: CellWriter, prefix: string, indent: string): void {
-        writer.println(prefix + (<any> this.value).constructor.name);
+        writer.println(prefix + this.name);
         for (let i = 0; i < this.items.length; i++) {
             let childPrefix: string;
             let childIndent: string;
@@ -79,9 +82,158 @@ export class SimpleCell extends Cell {
     public readonly _class_SimpleCell: any;
 
     public constructor(value: Value) {
-        super(value);
+        super(null, value);
+    }
+
+    public get name(): string {
+        return "SimpleCell " + (<any> this.value).constructor.name;
     }
 }
+
+export class ConstantCell extends Cell {
+    public readonly _class_ConstantCell: any;
+    public readonly kind: "constant" = "constant";
+
+    public constructor(parent: Cell | null) {
+        super(parent);
+    }
+
+    public get name(): string {
+        return this.kind;
+    }
+}
+
+export class TryCell extends Cell {
+    public readonly _class_extends: any;
+    public readonly kind: "ext" = "ext";
+
+    public constructor(parent: Cell | null) {
+        super(parent);
+    }
+
+    public get name(): string {
+        return this.kind;
+    }
+}
+
+export class ThrowCell extends Cell {
+    public readonly _class_ThrowCell: any;
+    public readonly kind: "throw" = "throw";
+
+    public constructor(parent: Cell | null) {
+        super(parent);
+    }
+
+    public get name(): string {
+        return this.kind;
+    }
+}
+
+export class AssignCell extends Cell {
+    public readonly _class_AssignCell: any;
+    public readonly kind: "assign" = "assign";
+
+    public constructor(parent: Cell | null) {
+        super(parent);
+    }
+
+    public get name(): string {
+        return this.kind;
+    }
+}
+
+export class IfCell extends Cell {
+    public readonly _class_extends: any;
+    public readonly kind: "ext" = "ext";
+
+    public constructor(parent: Cell | null) {
+        super(parent);
+    }
+
+    public get name(): string {
+        return this.kind;
+    }
+}
+
+export class LambdaCell extends Cell {
+    public readonly _class_LambdaCell: any;
+    public readonly kind: "lambda" = "lambda";
+
+    public constructor(parent: Cell | null) {
+        super(parent);
+    }
+
+    public get name(): string {
+        return this.kind;
+    }
+}
+
+export class SequenceCell extends Cell {
+    public readonly _class_SequenceCell: any;
+    public readonly kind: "sequence" = "sequence";
+
+    public constructor(parent: Cell | null) {
+        super(parent);
+    }
+
+    public get name(): string {
+        return this.kind;
+    }
+}
+
+export class ApplyCell extends Cell {
+    public readonly _class_ApplyCell: any;
+    public readonly kind: "apply" = "apply";
+
+    public constructor(parent: Cell | null) {
+        super(parent);
+    }
+
+    public get name(): string {
+        return this.kind;
+    }
+}
+
+export class VariableCell extends Cell {
+    public readonly _class_VariableCell: any;
+    public readonly kind: "variable" = "variable";
+
+    public constructor(parent: Cell | null) {
+        super(parent);
+    }
+
+    public get name(): string {
+        return this.kind;
+    }
+}
+
+export class LetrecCell extends Cell {
+    public readonly _class_LetrecCell: any;
+    public readonly kind: "letrec" = "letrec";
+
+    public constructor(parent: Cell | null) {
+        super(parent);
+    }
+
+    public get name(): string {
+        return this.kind;
+    }
+}
+
+export class InputCell extends Cell {
+    public readonly _class_InputCell: any;
+    public readonly kind: "input" = "input";
+
+    public constructor(parent: Cell | null) {
+        super(parent);
+    }
+
+    public get name(): string {
+        return this.kind;
+    }
+}
+
+
 
 export function evalTracing(node: ASTNode, env: Environment): SimpleCell {
     switch (node.kind) {
