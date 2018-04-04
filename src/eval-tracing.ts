@@ -134,9 +134,9 @@ export class ThrowCell extends Cell {
     }
 }
 
-export class AssignCell extends Cell {
+export class WriteCell extends Cell {
     public readonly _class_AssignCell: any;
-    public readonly kind: "assign" = "assign";
+    public readonly kind: "write" = "write";
 
     public constructor(parent: Cell | null) {
         super(parent);
@@ -199,9 +199,9 @@ export class ApplyCell extends Cell {
     }
 }
 
-export class VariableCell extends Cell {
+export class ReadCell extends Cell {
     public readonly _class_VariableCell: any;
-    public readonly kind: "variable" = "variable";
+    public readonly kind: "read" = "read";
 
     public constructor(parent: Cell | null) {
         super(parent);
@@ -254,7 +254,7 @@ export function evalTracing(node: ASTNode, env: Environment, parent: Cell | null
             throw new Error("Exceptions are not supported in tracing evaluation mode");
         }
         case "assign": {
-            const cell = new AssignCell(parent);
+            const cell = new WriteCell(parent);
 
             const valueCell = evalTracing(node.body, env, cell);
             const value = valueCell.value;
@@ -321,7 +321,7 @@ export function evalTracing(node: ASTNode, env: Environment, parent: Cell | null
             return cell;
         }
         case "variable": {
-            const cell = new VariableCell(parent);
+            const cell = new ReadCell(parent);
             const variable = env.resolveRef(node.ref, node.range);
             const value = variable.value;
             cell.value = value;
