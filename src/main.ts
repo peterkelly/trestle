@@ -283,7 +283,7 @@ function main(): void {
 
 
                     disableEvalDirect();
-                    let counter = 0;
+                    let counter = 0; // tslint:disable-line:prefer-const
 
                     console.log("");
                     Value.currentGeneration = counter;
@@ -292,21 +292,21 @@ function main(): void {
                     resultCell.dump();
                     console.log("" + resultCell.value);
 
-                    setInterval(() => {
-                        try {
-                            console.log("");
-                            counter++;
-                            Value.currentGeneration = counter;
-                            updateInput("test", new NumberValue(counter));
-                            // reevaluateDataflowGraph();
-                            resultCell.dump();
-                            console.log("" + resultCell.value.toStringWithOptions({ generation: Value.currentGeneration }));
-                        }
-                        catch (e) {
-                            console.error("" + e);
-                            console.error(e);
-                        }
-                    }, 1000);
+                    // setInterval(() => {
+                    //     try {
+                    //         console.log("");
+                    //         counter++;
+                    //         Value.currentGeneration = counter;
+                    //         updateInput("test", new NumberValue(counter));
+                    //         // reevaluateDataflowGraph();
+                    //         resultCell.dump();
+                    //         console.log("" + resultCell.value.toStringWithOptions({ generation: Value.currentGeneration }));
+                    //     }
+                    //     catch (e) {
+                    //         console.error("" + e);
+                    //         console.error(e);
+                    //     }
+                    // }, 1000);
                 }
                 catch (e) {
                     showError("TRACING Failure: ", e, filename, input);
