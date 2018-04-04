@@ -53,7 +53,7 @@ export abstract class Cell {
             let childPrefix: string;
             let childIndent: string;
             if (i + 1 < this.items.length) {
-                childPrefix = indent + "├─ ";
+                childPrefix = indent + "├── ";
                 childIndent = indent + "│   ";
             }
             else {
