@@ -6,53 +6,44 @@ import { Variable, Environment, SchemeException } from "./runtime";
 import { BuiltinProcedureValue } from "./builtins";
 import { getInput } from "./dataflow";
 
-export interface ReadItem {
-    kind: "read";
-    variable: Variable;
-}
-
-export interface WriteIem {
-    kind: "write";
-    variable: Variable;
-}
-
-export interface CellItem {
-    kind: "cell";
-    cell: Cell;
-}
-
 export interface CellWriter {
     println(msg: string): void;
 }
 
-export type TraceItem = ReadItem | WriteIem | CellItem;
+interface WriteOptions {
+    width?: number;
+}
 
 export abstract class Cell {
     public readonly _class_Cell: any;
     public value: Value;
-    public items: TraceItem[] = [];
+    public children: Cell[] = [];
     public abstract name: string;
     public readonly parent: Cell | null;
+    public readonly id: number;
+    private static nextId: number = 0;
+    // public assoc = new Map<Variable, Cell>();
 
     public constructor(parent: Cell | null, value?: Value) {
+        this.id = Cell.nextId++;
         this.parent = parent;
         if (this.parent !== null)
-            this.parent.items.push({
-                kind: "cell",
-                cell: this,
-            });
+            this.parent.children.push(this);
         if (value !== undefined)
             this.value = value;
         else
             this.value = UnspecifiedValue.instance;
     }
 
-    public write(writer: CellWriter, prefix: string, indent: string): void {
-        writer.println(prefix + this.name);
-        for (let i = 0; i < this.items.length; i++) {
+    public write(writer: CellWriter, prefix: string, indent: string, options: WriteOptions): void {
+        let line = prefix + this.name;
+        if (options.width !== undefined)
+            line = line.padEnd(options.width) + "|";
+        writer.println(line);
+        for (let i = 0; i < this.children.length; i++) {
             let childPrefix: string;
             let childIndent: string;
-            if (i + 1 < this.items.length) {
+            if (i + 1 < this.children.length) {
                 childPrefix = indent + "├── ";
                 childIndent = indent + "│   ";
             }
@@ -60,26 +51,28 @@ export abstract class Cell {
                 childPrefix = indent + "└── ";
                 childIndent = indent + "    ";
             }
-            const item = this.items[i];
-            switch (item.kind) {
-                case "read":
-                    writer.println(childPrefix + " read " + item.variable.slot.name);
-                    break;
-                case "write":
-                    writer.println(childPrefix + " write " + item.variable.slot.name);
-                    break;
-                case "cell":
-                    item.cell.write(writer, childPrefix, childIndent);
-                    break;
-            }
+            const child = this.children[i];
+            child.write(writer, childPrefix, childIndent, options);
         }
     }
 
-    public dump(): void {
+    public treeToString(options?: WriteOptions): string {
+        options = options || {};
+        const lines: string[] = [];
         const writer: CellWriter = {
-            println: (msg: string): void => console.log(msg),
+            println(msg: string): void {
+                lines.push(msg);
+            }
         };
-        this.write(writer, "", "");
+        this.write(writer, "", "", options);
+        return lines.join("\n");
+    }
+
+    public findVars(vars: Set<Variable>): void {
+        if ((this instanceof ReadCell) || (this instanceof WriteCell))
+            vars.add(this.variable);
+        for (const child of this.children)
+            child.findVars(vars);
     }
 }
 

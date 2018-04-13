@@ -18,7 +18,7 @@ import { BuildError } from "./sexpr";
 import { ErrorValue } from "./value";
 import { SourceRange } from "./source";
 import { DataflowNode, EnvSlotDataflowNode } from "./dataflow";
-import { Cell } from './eval-tracing';
+import { Cell } from "./eval-tracing";
 
 export type Continuation = (value: Value) => void;
 
@@ -27,6 +27,7 @@ export class Variable {
     public slot: LexicalSlot;
     public node: DataflowNode;
     public cell?: Cell;
+    public builtin: boolean = false;
     public constructor(slot: LexicalSlot, value: Value) {
         this.slot = slot;
         this.node = new EnvSlotDataflowNode();

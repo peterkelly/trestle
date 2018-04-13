@@ -17,7 +17,7 @@ import { Parser } from "./parse";
 import { SExpr, SymbolExpr, PairExpr, NilExpr, BuildError, buildSequenceFromList } from "./sexpr";
 import { SourceInput, testSourceCoords } from "./source";
 import { LexicalScope } from "./scope";
-import { Environment, SchemeException } from "./runtime";
+import { Variable, Environment, SchemeException } from "./runtime";
 import { Value, NumberValue, ErrorValue } from "./value";
 import { BuiltinProcedureValue, builtins, wrapBuiltinCPS } from "./builtins";
 import { simplify } from "./simplify";
@@ -218,6 +218,7 @@ function main(): void {
                 else
                     variable.value = new BuiltinProcedureValue(name, fun);
                 variable.cell = new SimpleCell(variable.value);
+                variable.builtin = true;
             }
 
             if (options.evalKind === EvalKind.Direct) {
@@ -286,12 +287,36 @@ function main(): void {
                     disableEvalDirect();
                     let counter = 0; // tslint:disable-line:prefer-const
 
-                    console.log("");
+                    // console.log("");
                     Value.currentGeneration = counter;
                     createInput("test", new NumberValue(counter));
                     const resultCell = evalTracing(built, topLevelEnv, null);
-                    resultCell.dump();
-                    console.log("" + resultCell.value);
+                    console.log("result = " + resultCell.value);
+
+                    // Find user variables
+                    const varSet = new Set<Variable>();
+                    resultCell.findVars(varSet);
+                    const allVars = Array.from(varSet).sort((a, b) => {
+                        if (a.slot.name < b.slot.name)
+                            return -1;
+                        else if (a.slot.name > b.slot.name)
+                            return 1;
+                        else
+                            return 0;
+                    });
+                    const userVars = allVars.filter(v => !v.builtin);
+                    console.log("all vars: " + allVars.map(v => v.slot.name).join(" "));
+                    console.log("vars: " + userVars.map(v => v.slot.name).join(" "));
+
+
+                    // Print execution tree
+                    const executionTreeStr = resultCell.treeToString();
+                    // console.log(executionTreeStr);
+                    const maxLineLen = Math.max.apply(null, executionTreeStr.split("\n").map(l => l.length));
+                    console.log("maxLineLen = " + maxLineLen);
+                    const detailStr = resultCell.treeToString({ width: maxLineLen });
+                    console.log(detailStr);
+
 
                     // setInterval(() => {
                     //     try {
