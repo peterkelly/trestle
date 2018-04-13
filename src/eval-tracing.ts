@@ -110,7 +110,7 @@ export class ConstantCell extends Cell {
 
 export class TryCell extends Cell {
     public readonly _class_extends: any;
-    public readonly kind: "ext" = "ext";
+    public readonly kind: "try" = "try";
 
     public constructor(parent: Cell | null) {
         super(parent);
@@ -134,9 +134,9 @@ export class ThrowCell extends Cell {
     }
 }
 
-export class WriteCell extends Cell {
+export class SetCell extends Cell {
     public readonly _class_AssignCell: any;
-    public readonly kind: "write" = "write";
+    public readonly kind: "set" = "set";
 
     public constructor(parent: Cell | null) {
         super(parent);
@@ -147,9 +147,24 @@ export class WriteCell extends Cell {
     }
 }
 
+export class WriteCell extends Cell {
+    public readonly _class_AssignCell: any;
+    public readonly kind: "write" = "write";
+    public readonly variable: Variable;
+
+    public constructor(parent: Cell | null, variable: Variable) {
+        super(parent);
+        this.variable = variable;
+    }
+
+    public get name(): string {
+        return "write " + this.variable.slot.name;
+    }
+}
+
 export class IfCell extends Cell {
     public readonly _class_extends: any;
-    public readonly kind: "ext" = "ext";
+    public readonly kind: "if" = "if";
 
     public constructor(parent: Cell | null) {
         super(parent);
@@ -202,13 +217,15 @@ export class ApplyCell extends Cell {
 export class ReadCell extends Cell {
     public readonly _class_VariableCell: any;
     public readonly kind: "read" = "read";
+    public readonly variable: Variable;
 
-    public constructor(parent: Cell | null) {
+    public constructor(parent: Cell | null, variable: Variable) {
         super(parent);
+        this.variable = variable;
     }
 
     public get name(): string {
-        return this.kind;
+        return "read " + this.variable.slot.name;
     }
 }
 
@@ -254,12 +271,14 @@ export function evalTracing(node: ASTNode, env: Environment, parent: Cell | null
             throw new Error("Exceptions are not supported in tracing evaluation mode");
         }
         case "assign": {
-            const cell = new WriteCell(parent);
+            const variable = env.resolveRef(node.ref, node.range);
+            const cell = new SetCell(parent);
 
             const valueCell = evalTracing(node.body, env, cell);
-            const value = valueCell.value;
-            const variable = env.resolveRef(node.ref, node.range);
-            variable.value = value;
+            // const value = valueCell.value;
+            // variable.value = value;
+            variable.cell = valueCell;
+            new WriteCell(cell, variable);
             return cell;
         }
         case "if": {
@@ -284,7 +303,12 @@ export function evalTracing(node: ASTNode, env: Environment, parent: Cell | null
             return cell;
         }
         case "sequence": {
-            const cell = new SequenceCell(parent);
+            let cell: Cell;
+            // if ((parent !== null) && (parent instanceof SequenceCell))
+            //     cell = parent;
+            // else
+                cell = new SequenceCell(parent);
+            // const cell = new SequenceCell(parent);
             const ignoreCell = evalTracing(node.body, env, cell);
             void ignoreCell;
             const resultCell = evalTracing(node.next, env, cell);
@@ -321,22 +345,31 @@ export function evalTracing(node: ASTNode, env: Environment, parent: Cell | null
             return cell;
         }
         case "variable": {
-            const cell = new ReadCell(parent);
             const variable = env.resolveRef(node.ref, node.range);
-            const value = variable.value;
-            cell.value = value;
-            return cell;
+            // const cell = new ReadCell(parent, variable);
+            const valueCell = variable.cell;
+            if (valueCell === undefined)
+                throw new Error("Variable " + variable.slot.name + " does not have a cell");
+            // const value = variable.value;
+            // const value = valueCell.value;
+            // cell.value = value;
+            // return cell;
+            new ReadCell(parent, variable);
+            return valueCell;
         }
         case "letrec": {
             const cell = new LetrecCell(parent);
             const innerEnv = new Environment(node.innerScope, env);
-            const bindingArray: Value[] = [];
+            // const bindingArray: Value[] = [];
+            const cellArray: Cell[] = [];
             for (const binding of node.bindings) {
                 const varCell = evalTracing(binding.body, innerEnv, cell);
-                const varValue = varCell.value;
-                bindingArray.push(varValue);
+                cellArray.push(varCell);
+                // const varValue = varCell.value;
+                // bindingArray.push(varValue);
             }
-            innerEnv.setVariableValues(bindingArray);
+            // innerEnv.setVariableValues(bindingArray);
+            innerEnv.setVariableCells(cellArray);
             const bodyCell = evalTracing(node.body, innerEnv, cell);
             const bodyValue = bodyCell.value;
             cell.value = bodyValue;

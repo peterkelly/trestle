@@ -22,7 +22,7 @@ import { Value, NumberValue, ErrorValue } from "./value";
 import { BuiltinProcedureValue, builtins, wrapBuiltinCPS } from "./builtins";
 import { simplify } from "./simplify";
 import { evalDirect, disableEvalDirect } from "./eval-direct";
-import { evalTracing } from "./eval-tracing";
+import { evalTracing, SimpleCell } from "./eval-tracing";
 import { evalCps } from "./eval-cps";
 import { createInput, updateInput, reevaluateDataflowGraph, createDataflowNode } from "./dataflow";
 
@@ -217,6 +217,7 @@ function main(): void {
                     variable.value = new BuiltinProcedureValue(name, wrapBuiltinCPS(fun));
                 else
                     variable.value = new BuiltinProcedureValue(name, fun);
+                variable.cell = new SimpleCell(variable.value);
             }
 
             if (options.evalKind === EvalKind.Direct) {

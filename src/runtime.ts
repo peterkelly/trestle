@@ -18,6 +18,7 @@ import { BuildError } from "./sexpr";
 import { ErrorValue } from "./value";
 import { SourceRange } from "./source";
 import { DataflowNode, EnvSlotDataflowNode } from "./dataflow";
+import { Cell } from './eval-tracing';
 
 export type Continuation = (value: Value) => void;
 
@@ -25,6 +26,7 @@ export class Variable {
     public _class_Variable: any;
     public slot: LexicalSlot;
     public node: DataflowNode;
+    public cell?: Cell;
     public constructor(slot: LexicalSlot, value: Value) {
         this.slot = slot;
         this.node = new EnvSlotDataflowNode();
@@ -81,6 +83,13 @@ export class Environment {
             throw new Error("Incorrect number of variable values");
         for (let i = 0; i < values.length; i++)
             this.variables[i].value = values[i];
+    }
+
+    public setVariableCells(cells: Cell[]): void {
+        if (cells.length !== this.variables.length)
+            throw new Error("Incorrect number of cells");
+        for (let i = 0; i < cells.length; i++)
+            this.variables[i].cell = cells[i];
     }
 
     public setVariableDataflowNodes(nodes: DataflowNode[]): void {
