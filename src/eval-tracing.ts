@@ -93,7 +93,7 @@ export abstract class Cell {
             }).map(([key, value]) => value);
             line = line.padEnd(options.width) + " |";
             for (const binding of entries) {
-                line += " " + binding.variable.slot.name + "=#" + binding.cell.id;
+                line += " " + binding.variable.slot.name + "=#" + binding.cell.id + "=" + binding.cell.value;
             }
         }
         writer.println(line);
