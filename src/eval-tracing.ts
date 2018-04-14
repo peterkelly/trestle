@@ -139,8 +139,8 @@ export abstract class Cell {
                 skip = true;
             else if (cell instanceof ConstantCell)
                 skip = true;
-            else if (cell instanceof InputCell)
-                skip = true;
+            // else if (cell instanceof InputCell)
+            //     skip = true;
             if (!skip)
                 selected.push(cell);
         }
@@ -331,13 +331,15 @@ export class LetrecCell extends Cell {
 export class InputCell extends Cell {
     public readonly _class_InputCell: any;
     public readonly kind: "input" = "input";
+    public readonly inputName: string;
 
-    public constructor(parent: Cell | null) {
+    public constructor(parent: Cell | null, inputName: string) {
         super(parent);
+        this.inputName = inputName;
     }
 
     public get name(): string {
-        return this.kind;
+        return "input[" + JSON.stringify(this.inputName) + "]";
     }
 }
 
@@ -460,7 +462,7 @@ export function evalTracing(node: ASTNode, env: Environment, parent: Cell | null
             return cell;
         }
         case "input": {
-            const cell = new InputCell(parent);
+            const cell = new InputCell(parent, node.name);
             const inputDataflowNode = getInput(node.name);
             cell.value = inputDataflowNode.value;
             return cell;
