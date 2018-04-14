@@ -311,16 +311,11 @@ function main(): void {
                             return 0;
                     });
                     const userVars = allVars.filter(v => !v.builtin);
-                    console.log("all vars: " + allVars.map(v => v.slot.name).join(" "));
-                    console.log("vars: " + userVars.map(v => v.slot.name).join(" "));
-
+                    // console.log("all vars: " + allVars.map(v => v.slot.name).join(" "));
+                    // console.log("vars: " + userVars.map(v => v.slot.name).join(" "));
 
                     // Print execution tree
                     const executionTreeStr = resultCell.treeToString();
-                    // console.log(executionTreeStr);
-                    // const maxLineLen = Math.max.apply(null, executionTreeStr.split("\n").map(l => l.length));
-                    // console.log("maxLineLen = " + maxLineLen);
-                    // const detailStr = resultCell.treeToString({ abbrev: options.abbrev, width: maxLineLen });
                     console.log(executionTreeStr);
 
 
