@@ -75,6 +75,7 @@ interface Options {
     filename: string | null;
     cpsBuiltins: boolean;
     transformations: Transformations;
+    abbrev: boolean;
 }
 
 function parseCommandLineOptions(args: string[]): Options {
@@ -85,6 +86,7 @@ function parseCommandLineOptions(args: string[]): Options {
         filename: null,
         cpsBuiltins: false,
         transformations: Transformations.Simplify,
+        abbrev: false,
     };
 
     for (let argno = 0; argno < args.length; argno++) {
@@ -118,6 +120,9 @@ function parseCommandLineOptions(args: string[]): Options {
             }
             else if (args[argno] === "--cps-builtins") {
                 options.cpsBuiltins = true;
+            }
+            else if (args[argno] === "--abbrev") {
+                options.abbrev = true;
             }
             else {
                 console.error("Unknown option: " + args[argno]);
@@ -315,7 +320,7 @@ function main(): void {
                     const maxLineLen = Math.max.apply(null, executionTreeStr.split("\n").map(l => l.length));
                     console.log("maxLineLen = " + maxLineLen);
                     resultCell.computeLiveBindings();
-                    const detailStr = resultCell.treeToString({ width: maxLineLen });
+                    const detailStr = resultCell.treeToString({ abbrev: options.abbrev, width: maxLineLen });
                     console.log(detailStr);
 
 
