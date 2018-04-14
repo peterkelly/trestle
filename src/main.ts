@@ -26,6 +26,21 @@ import { evalTracing, SimpleCell, BindingSet } from "./eval-tracing";
 import { evalCps } from "./eval-cps";
 import { createInput, updateInput, reevaluateDataflowGraph, createDataflowNode } from "./dataflow";
 
+function pageString(input: string, height: number | null): string {
+    if (height === null)
+        return input;
+    const lines = input.split("\n");
+    if (lines.length > height) {
+        lines.length = height;
+        lines[height - 1] = "**** TRUNCATED ****";
+    }
+    else {
+        while (lines.length < height)
+            lines.push("");
+    }
+    return lines.join("\n");
+}
+
 function showBuildError(e: BuildError, filename: string, input: string): void {
     const sinput = new SourceInput(input);
     const startCoords = sinput.coordsFromLocation(e.range.start);
@@ -126,7 +141,7 @@ function parseCommandLineOptions(args: string[]): Options {
             else if (args[argno] === "--abbrev") {
                 options.abbrev = true;
             }
-            else if ((argno + 1 < args.length) && (args[argno] === "--height") {
+            else if ((argno + 1 < args.length) && (args[argno] === "--height")) {
                 argno++;
                 options.height = parseInt(args[argno]);
             }
@@ -303,7 +318,7 @@ function main(): void {
                     Value.currentGeneration = counter;
                     createInput("test", new NumberValue(counter));
                     const resultCell = evalTracing(built, topLevelEnv, null, bindings);
-                    console.log("result = " + resultCell.value);
+                    // console.log("result = " + resultCell.value);
 
                     // Find user variables
                     const varSet = new Set<Variable>();
@@ -321,8 +336,19 @@ function main(): void {
                     // console.log("vars: " + userVars.map(v => v.slot.name).join(" "));
 
                     // Print execution tree
-                    const executionTreeStr = resultCell.treeToString();
-                    console.log(executionTreeStr);
+                    // const executionTreeStr = resultCell.treeToString();
+                    // console.log(executionTreeStr);
+                    const initialStr = "Initial evaluation\n" + resultCell.treeToString();
+                    console.log(pageString(initialStr, options.height));
+                    updateInput("test", new NumberValue(1));
+
+                    // const first = "First\n" + executionTreeStr;
+                    // const second = "Second\n" + executionTreeStr;
+                    // const third = "Third\n" + executionTreeStr;
+
+                    // console.log(pageString(first, options.height));
+                    // console.log(pageString(second, options.height));
+                    // console.log(pageString(third, options.height));
 
 
                     // setInterval(() => {
