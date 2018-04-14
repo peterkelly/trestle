@@ -6,6 +6,8 @@ import { Variable, Environment, SchemeException } from "./runtime";
 import { BuiltinProcedureValue } from "./builtins";
 import { getInput } from "./dataflow";
 
+const FILTER_CELLS = true;
+
 export interface CellWriter {
     println(msg: string): void;
 }
@@ -85,10 +87,16 @@ export abstract class Cell {
 
     public static writeCell(cell: Cell, writer: CellWriter, prefix: string, indent: string, options: WriteOptions): void {
         // let line = prefix + this.name;
-        let children = Cell.filterCellsForDisplay(cell.children);
-        while ((cell instanceof ApplyCell) && (children.length === 1)) {
-            cell = children[0];
+        let children: Cell[];
+        if (FILTER_CELLS) {
             children = Cell.filterCellsForDisplay(cell.children);
+            while ((cell instanceof ApplyCell) && (children.length === 1)) {
+                cell = children[0];
+                children = Cell.filterCellsForDisplay(cell.children);
+            }
+        }
+        else {
+            children = cell.children;
         }
 
         let line = prefix + "#" + cell.id + " " + cell.name;
