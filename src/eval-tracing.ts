@@ -396,20 +396,20 @@ export function evalTracing(node: ASTNode, env: Environment, parent: Cell | null
             const cell = new ApplyCell(bindings, parent);
             const procCell = evalTracing(node.proc, env, cell, bindings);
             const procValue = procCell.value;
-            const argArray: Value[] = [];
+            const argCells: Cell[] = [];
             for (let i = 0; i < node.args.length; i++) {
                 const arg = node.args[i];
                 const argCell = evalTracing(arg, env, cell, bindings);
-                const argValue = argCell.value;
-                argArray.push(argValue);
+                argCells.push(argCell);
             }
 
             if (procValue instanceof BuiltinProcedureValue) {
-                const resultValue = procValue.direct(argArray);
+                const argValues = argCells.map(cell => cell.value);
+                const resultValue = procValue.direct(argValues);
                 cell.value = resultValue;
             }
             else if (procValue instanceof LambdaProcedureValue) {
-                const resultCell = evalLambdaTracing(procValue, argArray, node.range, cell, bindings);
+                const resultCell = evalLambdaTracing(procValue, argCells, node.range, cell, bindings);
                 const resultValue = resultCell.value;
                 cell.value = resultValue;
             }
@@ -436,15 +436,11 @@ export function evalTracing(node: ASTNode, env: Environment, parent: Cell | null
         case "letrec": {
             const cell = new LetrecCell(bindings, parent);
             const innerEnv = new Environment(node.innerScope, env);
-            // const bindingArray: Value[] = [];
             const cellArray: Cell[] = [];
             for (const binding of node.bindings) {
                 const varCell = evalTracing(binding.body, innerEnv, cell, bindings);
                 cellArray.push(varCell);
-                // const varValue = varCell.value;
-                // bindingArray.push(varValue);
             }
-            // innerEnv.setVariableValues(bindingArray);
             innerEnv.setVariableCells(cellArray);
             const bodyCell = evalTracing(node.body, innerEnv, cell, bindings);
             const bodyValue = bodyCell.value;
@@ -460,21 +456,22 @@ export function evalTracing(node: ASTNode, env: Environment, parent: Cell | null
     }
 }
 
-export function evalLambdaTracing(procValue: LambdaProcedureValue, argArray: Value[],
+export function evalLambdaTracing(procValue: LambdaProcedureValue, argCells: Cell[],
     range: SourceRange, parent: Cell, bindings: BindingSet): Cell {
     const outerEnv = procValue.env;
     const lambdaNode = procValue.proc;
     const cell = new LambdaCell(bindings, parent);
 
     const expectedArgCount = lambdaNode.variables.length;
-    const actualArgCount = argArray.length;
+    const actualArgCount = argCells.length;
     if (actualArgCount !== expectedArgCount) {
         const msg = "Incorrect number of arguments; have " + actualArgCount + ", expected " + expectedArgCount;
         const error = new BuildError(range, msg);
         throw new SchemeException(new ErrorValue(error));
     }
 
-    const innerEnv = new Environment(lambdaNode.innerScope, outerEnv, argArray);
+    const innerEnv = new Environment(lambdaNode.innerScope, outerEnv);
+    innerEnv.setVariableCells(argCells);
     const bodyCell = evalTracing(procValue.proc.body, innerEnv, cell, bindings);
     const bodyValue = bodyCell.value;
     cell.value = bodyValue;
