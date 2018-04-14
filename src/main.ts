@@ -22,7 +22,7 @@ import { Value, NumberValue, ErrorValue } from "./value";
 import { BuiltinProcedureValue, builtins, wrapBuiltinCPS } from "./builtins";
 import { simplify } from "./simplify";
 import { evalDirect, disableEvalDirect } from "./eval-direct";
-import { evalTracing, SimpleCell } from "./eval-tracing";
+import { evalTracing, SimpleCell, BindingSet } from "./eval-tracing";
 import { evalCps } from "./eval-cps";
 import { createInput, updateInput, reevaluateDataflowGraph, createDataflowNode } from "./dataflow";
 
@@ -209,6 +209,7 @@ function main(): void {
             const built = buildSequenceFromList(toplevelScope, itemList);
 
             const topLevelEnv = new Environment(toplevelScope, null);
+            const bindings = new BindingSet();
 
             for (const name of Object.keys(builtins).sort()) {
                 const fun = builtins[name];
@@ -222,7 +223,7 @@ function main(): void {
                     variable.value = new BuiltinProcedureValue(name, wrapBuiltinCPS(fun));
                 else
                     variable.value = new BuiltinProcedureValue(name, fun);
-                variable.cell = new SimpleCell(variable.value);
+                variable.cell = new SimpleCell(bindings, variable.value);
                 variable.builtin = true;
             }
 
@@ -295,7 +296,7 @@ function main(): void {
                     // console.log("");
                     Value.currentGeneration = counter;
                     createInput("test", new NumberValue(counter));
-                    const resultCell = evalTracing(built, topLevelEnv, null);
+                    const resultCell = evalTracing(built, topLevelEnv, null, bindings);
                     console.log("result = " + resultCell.value);
 
                     // Find user variables
@@ -319,7 +320,6 @@ function main(): void {
                     // console.log(executionTreeStr);
                     const maxLineLen = Math.max.apply(null, executionTreeStr.split("\n").map(l => l.length));
                     console.log("maxLineLen = " + maxLineLen);
-                    resultCell.computeLiveBindings();
                     const detailStr = resultCell.treeToString({ abbrev: options.abbrev, width: maxLineLen });
                     console.log(detailStr);
 
