@@ -14,6 +14,34 @@ interface WriteOptions {
     width?: number;
 }
 
+interface LiveBinding {
+    variable: Variable;
+    cell: Cell;
+    writer: WriteCell;
+}
+
+class BindingSet {
+    public bindings: Map<Variable, LiveBinding>;
+    public constructor(bindings?: Map<Variable, LiveBinding>) {
+        if (bindings !== undefined)
+            this.bindings = bindings;
+        else
+            this.bindings = new Map<Variable, LiveBinding>();
+    }
+
+    public clone(): BindingSet {
+        const map = new Map<Variable, LiveBinding>();
+        for (const [key, value] of this.bindings.entries()) {
+            map.set(key, {
+                variable: value.variable,
+                cell: value.cell,
+                writer: value.writer,
+            });
+        }
+        return new BindingSet(map);
+    }
+}
+
 export abstract class Cell {
     public readonly _class_Cell: any;
     public value: Value;
@@ -23,6 +51,22 @@ export abstract class Cell {
     public readonly id: number;
     private static nextId: number = 0;
     // public assoc = new Map<Variable, Cell>();
+    private liveBindings?: BindingSet;
+
+    public computeLiveBindings(current?: BindingSet): void {
+        if (current === undefined)
+            current = new BindingSet();
+        this.liveBindings = current.clone();
+        if (this instanceof WriteCell) {
+            current.bindings.set(this.variable, {
+                variable: this.variable,
+                cell: this.cell,
+                writer: this,
+            });
+        }
+        for (const child of this.children)
+            child.computeLiveBindings(current);
+    }
 
     public constructor(parent: Cell | null, value?: Value) {
         this.id = Cell.nextId++;
@@ -36,9 +80,22 @@ export abstract class Cell {
     }
 
     public write(writer: CellWriter, prefix: string, indent: string, options: WriteOptions): void {
-        let line = prefix + this.name;
-        if (options.width !== undefined)
-            line = line.padEnd(options.width) + "|";
+        // let line = prefix + this.name;
+        let line = prefix + "#" + this.id + " " + this.name;
+        if ((options.width !== undefined) && (this.liveBindings !== undefined)) {
+            const entries = Array.from(this.liveBindings.bindings.entries()).sort(([a, ac], [b, bc]) => {
+                if (a.slot.name < b.slot.name)
+                    return -1;
+                else if (a.slot.name > b.slot.name)
+                    return 1;
+                else
+                    return 0;
+            }).map(([key, value]) => value);
+            line = line.padEnd(options.width) + " |";
+            for (const binding of entries) {
+                line += " " + binding.variable.slot.name + "=#" + binding.cell.id;
+            }
+        }
         writer.println(line);
         for (let i = 0; i < this.children.length; i++) {
             let childPrefix: string;
@@ -144,10 +201,12 @@ export class WriteCell extends Cell {
     public readonly _class_AssignCell: any;
     public readonly kind: "write" = "write";
     public readonly variable: Variable;
+    public readonly cell: Cell;
 
-    public constructor(parent: Cell | null, variable: Variable) {
+    public constructor(parent: Cell | null, variable: Variable, cell: Cell) {
         super(parent);
         this.variable = variable;
+        this.cell = cell;
     }
 
     public get name(): string {
@@ -248,8 +307,6 @@ export class InputCell extends Cell {
     }
 }
 
-
-
 export function evalTracing(node: ASTNode, env: Environment, parent: Cell | null): Cell {
     switch (node.kind) {
         case "constant": {
@@ -271,7 +328,7 @@ export function evalTracing(node: ASTNode, env: Environment, parent: Cell | null
             // const value = valueCell.value;
             // variable.value = value;
             variable.cell = valueCell;
-            new WriteCell(cell, variable);
+            new WriteCell(cell, variable, valueCell);
             return cell;
         }
         case "if": {

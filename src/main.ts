@@ -314,6 +314,7 @@ function main(): void {
                     // console.log(executionTreeStr);
                     const maxLineLen = Math.max.apply(null, executionTreeStr.split("\n").map(l => l.length));
                     console.log("maxLineLen = " + maxLineLen);
+                    resultCell.computeLiveBindings();
                     const detailStr = resultCell.treeToString({ width: maxLineLen });
                     console.log(detailStr);
 
