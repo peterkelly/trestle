@@ -80,10 +80,14 @@ export abstract class Cell {
     }
 
     public write(writer: CellWriter, prefix: string, indent: string, options: WriteOptions): void {
+        Cell.writeCell(this, writer, prefix, indent, options);
+    }
+
+    public static writeCell(cell: Cell, writer: CellWriter, prefix: string, indent: string, options: WriteOptions): void {
         // let line = prefix + this.name;
-        let line = prefix + "#" + this.id + " " + this.name;
-        if ((options.width !== undefined) && (this.liveBindings !== undefined)) {
-            const entries = Array.from(this.liveBindings.bindings.entries()).sort(([a, ac], [b, bc]) => {
+        let line = prefix + "#" + cell.id + " " + cell.name;
+        if ((options.width !== undefined) && (cell.liveBindings !== undefined)) {
+            const entries = Array.from(cell.liveBindings.bindings.entries()).sort(([a, ac], [b, bc]) => {
                 if (a.slot.name < b.slot.name)
                     return -1;
                 else if (a.slot.name > b.slot.name)
@@ -97,10 +101,10 @@ export abstract class Cell {
             }
         }
         writer.println(line);
-        for (let i = 0; i < this.children.length; i++) {
+        for (let i = 0; i < cell.children.length; i++) {
             let childPrefix: string;
             let childIndent: string;
-            if (i + 1 < this.children.length) {
+            if (i + 1 < cell.children.length) {
                 childPrefix = indent + "├── ";
                 childIndent = indent + "│   ";
             }
@@ -108,7 +112,7 @@ export abstract class Cell {
                 childPrefix = indent + "└── ";
                 childIndent = indent + "    ";
             }
-            const child = this.children[i];
+            const child = cell.children[i];
             child.write(writer, childPrefix, childIndent, options);
         }
     }
