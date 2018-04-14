@@ -76,6 +76,7 @@ interface Options {
     cpsBuiltins: boolean;
     transformations: Transformations;
     abbrev: boolean;
+    height: number | null;
 }
 
 function parseCommandLineOptions(args: string[]): Options {
@@ -87,6 +88,7 @@ function parseCommandLineOptions(args: string[]): Options {
         cpsBuiltins: false,
         transformations: Transformations.Simplify,
         abbrev: false,
+        height: null,
     };
 
     for (let argno = 0; argno < args.length; argno++) {
@@ -123,6 +125,10 @@ function parseCommandLineOptions(args: string[]): Options {
             }
             else if (args[argno] === "--abbrev") {
                 options.abbrev = true;
+            }
+            else if ((argno + 1 < args.length) && (args[argno] === "--height") {
+                argno++;
+                options.height = parseInt(args[argno]);
             }
             else {
                 console.error("Unknown option: " + args[argno]);
