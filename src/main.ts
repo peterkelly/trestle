@@ -318,10 +318,10 @@ function main(): void {
                     // Print execution tree
                     const executionTreeStr = resultCell.treeToString();
                     // console.log(executionTreeStr);
-                    const maxLineLen = Math.max.apply(null, executionTreeStr.split("\n").map(l => l.length));
-                    console.log("maxLineLen = " + maxLineLen);
-                    const detailStr = resultCell.treeToString({ abbrev: options.abbrev, width: maxLineLen });
-                    console.log(detailStr);
+                    // const maxLineLen = Math.max.apply(null, executionTreeStr.split("\n").map(l => l.length));
+                    // console.log("maxLineLen = " + maxLineLen);
+                    // const detailStr = resultCell.treeToString({ abbrev: options.abbrev, width: maxLineLen });
+                    console.log(executionTreeStr);
 
 
                     // setInterval(() => {

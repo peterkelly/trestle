@@ -7,7 +7,7 @@ import { BuiltinProcedureValue } from "./builtins";
 import { getInput } from "./dataflow";
 
 export interface CellWriter {
-    println(msg: string): void;
+    println(msg: string[]): void;
 }
 
 interface WriteOptions {
@@ -85,7 +85,7 @@ export abstract class Cell {
         }
 
         let line = prefix + "#" + cell.id + " " + cell.name;
-        if ((options.width !== undefined) && (cell.liveBindings !== undefined)) {
+        // if ((options.width !== undefined) && (cell.liveBindings !== undefined)) {
             const entries = Array.from(cell.liveBindings.bindings.entries()).sort(([a, ac], [b, bc]) => {
                 if (a.slot.name < b.slot.name)
                     return -1;
@@ -94,12 +94,12 @@ export abstract class Cell {
                 else
                     return 0;
             }).map(([key, value]) => value);
-            line = line.padEnd(options.width) + " |";
-            for (const binding of entries) {
-                line += " " + binding.variable.slot.name + "=#" + binding.cell.id + "=" + binding.cell.value;
-            }
-        }
-        writer.println(line);
+            // line = line.padEnd(options.width) + " |";
+            let varColumn = "";
+            for (const binding of entries)
+                varColumn += " " + binding.variable.slot.name + "=#" + binding.cell.id + "=" + binding.cell.value;
+        // }
+        writer.println([line, varColumn]);
         for (let i = 0; i < children.length; i++) {
             let childPrefix: string;
             let childIndent: string;
@@ -134,14 +134,28 @@ export abstract class Cell {
 
     public treeToString(options?: WriteOptions): string {
         options = options || {};
-        const lines: string[] = [];
+        const lineParts: string[][] = [];
+        let columns = 0;
         const writer: CellWriter = {
-            println(msg: string): void {
-                lines.push(msg);
+            println(msg: string[]): void {
+                lineParts.push(msg);
+                columns = Math.max(columns, msg.length);
             }
         };
         this.write(writer, "", "", options);
-        return lines.join("\n");
+        const widths: number[] = [];
+        for (let i = 0; i < columns; i++)
+            widths.push(0);
+        for (let lineno = 0; lineno < lineParts.length; lineno++) {
+            for (let col = 0; col < lineParts[lineno].length; col++)
+                widths[col] = Math.max(widths[col], lineParts[lineno][col].length);
+        }
+        for (let lineno = 0; lineno < lineParts.length; lineno++) {
+            for (let col = 0; col < lineParts[lineno].length; col++)
+                lineParts[lineno][col] = lineParts[lineno][col].padEnd(widths[col]);
+        }
+        const actualLines = lineParts.map(cols => cols.join(" "));
+        return actualLines.join("\n");
     }
 
     public findVars(vars: Set<Variable>): void {
