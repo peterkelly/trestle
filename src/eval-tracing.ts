@@ -85,6 +85,12 @@ export abstract class Cell {
 
     public static writeCell(cell: Cell, writer: CellWriter, prefix: string, indent: string, options: WriteOptions): void {
         // let line = prefix + this.name;
+        let children = Cell.filterCellsForDisplay(cell.children);
+        while ((cell instanceof ApplyCell) && (children.length === 1)) {
+            cell = children[0];
+            children = Cell.filterCellsForDisplay(cell.children);
+        }
+
         let line = prefix + "#" + cell.id + " " + cell.name;
         if ((options.width !== undefined) && (cell.liveBindings !== undefined)) {
             const entries = Array.from(cell.liveBindings.bindings.entries()).sort(([a, ac], [b, bc]) => {
@@ -101,10 +107,10 @@ export abstract class Cell {
             }
         }
         writer.println(line);
-        for (let i = 0; i < cell.children.length; i++) {
+        for (let i = 0; i < children.length; i++) {
             let childPrefix: string;
             let childIndent: string;
-            if (i + 1 < cell.children.length) {
+            if (i + 1 < children.length) {
                 childPrefix = indent + "├── ";
                 childIndent = indent + "│   ";
             }
@@ -112,9 +118,25 @@ export abstract class Cell {
                 childPrefix = indent + "└── ";
                 childIndent = indent + "    ";
             }
-            const child = cell.children[i];
+            const child = children[i];
             child.write(writer, childPrefix, childIndent, options);
         }
+    }
+
+    public static filterCellsForDisplay(cells: Cell[]): Cell[] {
+        const selected: Cell[] = [];
+        for (const cell of cells) {
+            let skip = false;
+            if ((cell instanceof ReadCell) && (cell.variable.builtin))
+                skip = true;
+            else if (cell instanceof ConstantCell)
+                skip = true;
+            else if (cell instanceof InputCell)
+                skip = true;
+            if (!skip)
+                selected.push(cell);
+        }
+        return selected;
     }
 
     public treeToString(options?: WriteOptions): string {
