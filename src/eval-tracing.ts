@@ -83,22 +83,31 @@ export abstract class Cell {
     public value: Value;
     public children: Cell[] = [];
     public abstract name: string;
-    public readonly parent: Cell | null;
+    public parent: Cell | null = null;
     public readonly id: number;
     private static nextId: number = 0;
     private liveBindings: BindingSet;
     public isDirty: boolean = false;
 
-    public constructor(bindings: BindingSet, parent: Cell | null, value?: Value) {
+    public constructor(bindings: BindingSet, value?: Value) {
         this.liveBindings = bindings.clone();
         this.id = Cell.nextId++;
-        this.parent = parent;
         if (this.parent !== null)
             this.parent.children.push(this);
         if (value !== undefined)
             this.value = value;
         else
             this.value = UnspecifiedValue.instance;
+    }
+
+    public addChild(cell: Cell): void {
+        const index = this.children.indexOf(cell);
+        if (index >= 0)
+            throw new Error("addChild: cell already exists in children array");
+        if (cell.parent !== null)
+            throw new Error("addChild: cell already has another parent");
+        this.children.push(cell);
+        cell.parent = this;
     }
 
     public write(writer: CellWriter, prefix: string, indent: string, options: WriteOptions): void {
@@ -232,7 +241,7 @@ export class SimpleCell extends Cell {
     public readonly _class_SimpleCell: any;
 
     public constructor(bindings: BindingSet, value: Value) {
-        super(bindings, null, value);
+        super(bindings, value);
     }
 
     public get name(): string {
@@ -245,8 +254,8 @@ export class ConstantCell extends Cell {
     public readonly kind: "constant" = "constant";
     public readonly node: ConstantNode;
 
-    public constructor(node: ConstantNode, bindings: BindingSet, parent: Cell | null) {
-        super(bindings, parent);
+    public constructor(node: ConstantNode, bindings: BindingSet) {
+        super(bindings);
         this.node = node;
     }
 
@@ -259,8 +268,8 @@ export class TryCell extends Cell {
     public readonly _class_extends: any;
     public readonly kind: "try" = "try";
 
-    public constructor(bindings: BindingSet, parent: Cell | null) {
-        super(bindings, parent);
+    public constructor(bindings: BindingSet) {
+        super(bindings);
     }
 
     public get name(): string {
@@ -272,8 +281,8 @@ export class ThrowCell extends Cell {
     public readonly _class_ThrowCell: any;
     public readonly kind: "throw" = "throw";
 
-    public constructor(bindings: BindingSet, parent: Cell | null) {
-        super(bindings, parent);
+    public constructor(bindings: BindingSet) {
+        super(bindings);
     }
 
     public get name(): string {
@@ -286,8 +295,8 @@ export class AssignCell extends Cell {
     public readonly kind: "assign" = "assign";
     public readonly node: AssignNode;
 
-    public constructor(node: AssignNode, bindings: BindingSet, parent: Cell | null) {
-        super(bindings, parent);
+    public constructor(node: AssignNode, bindings: BindingSet) {
+        super(bindings);
         this.node = node;
     }
 
@@ -302,8 +311,8 @@ export class WriteCell extends Cell {
     public readonly variable: Variable;
     public readonly cell: Cell;
 
-    public constructor(bindings: BindingSet, parent: Cell | null, variable: Variable, cell: Cell) {
-        super(bindings, parent);
+    public constructor(bindings: BindingSet, variable: Variable, cell: Cell) {
+        super(bindings);
         this.variable = variable;
         this.cell = cell;
         bindings.bindings.set(this.variable, {
@@ -323,8 +332,8 @@ export class IfCell extends Cell {
     public readonly kind: "if" = "if";
     public readonly node: IfNode;
 
-    public constructor(node: IfNode, bindings: BindingSet, parent: Cell | null) {
-        super(bindings, parent);
+    public constructor(node: IfNode, bindings: BindingSet) {
+        super(bindings);
         this.node = node;
     }
 
@@ -338,8 +347,8 @@ export class LambdaCell extends Cell {
     public readonly kind: "lambda" = "lambda";
     public readonly node: LambdaNode;
 
-    public constructor(node: LambdaNode, bindings: BindingSet, parent: Cell | null) {
-        super(bindings, parent);
+    public constructor(node: LambdaNode, bindings: BindingSet) {
+        super(bindings);
         this.node = node;
     }
 
@@ -357,8 +366,8 @@ export class CallCell extends Cell {
 
     public constructor(procValue: LambdaProcedureValue, argCells: Cell[],
         range: SourceRange,
-        bindings: BindingSet, parent: Cell | null) {
-        super(bindings, parent);
+        bindings: BindingSet) {
+        super(bindings);
         this.procValue = procValue,
         this.argCells = argCells;
         this.range = range;
@@ -374,8 +383,8 @@ export class SequenceCell extends Cell {
     public readonly kind: "sequence" = "sequence";
     public readonly node: SequenceNode;
 
-    public constructor(node: SequenceNode, bindings: BindingSet, parent: Cell | null) {
-        super(bindings, parent);
+    public constructor(node: SequenceNode, bindings: BindingSet) {
+        super(bindings);
         this.node = node;
     }
 
@@ -389,8 +398,8 @@ export class ApplyCell extends Cell {
     public readonly kind: "apply" = "apply";
     public readonly node: ApplyNode;
 
-    public constructor(node: ApplyNode, bindings: BindingSet, parent: Cell | null) {
-        super(bindings, parent);
+    public constructor(node: ApplyNode, bindings: BindingSet) {
+        super(bindings);
         this.node = node;
     }
 
@@ -404,8 +413,8 @@ export class VariableCell extends Cell {
     public readonly kind: "variable" = "variable";
     public readonly node: VariableNode;
 
-    public constructor(node: VariableNode, bindings: BindingSet, parent: Cell | null) {
-        super(bindings, parent);
+    public constructor(node: VariableNode, bindings: BindingSet) {
+        super(bindings);
         this.node = node;
     }
 
@@ -419,8 +428,8 @@ export class ReadCell extends Cell {
     public readonly kind: "read" = "read";
     public readonly variable: Variable;
 
-    public constructor(bindings: BindingSet, parent: Cell | null, variable: Variable) {
-        super(bindings, parent);
+    public constructor(bindings: BindingSet, variable: Variable) {
+        super(bindings);
         this.variable = variable;
     }
 
@@ -434,8 +443,8 @@ export class LetrecCell extends Cell {
     public readonly kind: "letrec" = "letrec";
     public readonly node: LetrecNode;
 
-    public constructor(node: LetrecNode, bindings: BindingSet, parent: Cell | null) {
-        super(bindings, parent);
+    public constructor(node: LetrecNode, bindings: BindingSet) {
+        super(bindings);
         this.node = node;
     }
 
@@ -452,8 +461,8 @@ export class InputCell extends Cell {
     public dfnode: InputDataflowNode | null = null;
     private listener: ValueChangeListener;
 
-    public constructor(node: InputNode, bindings: BindingSet, parent: Cell | null, inputName: string) {
-        super(bindings, parent);
+    public constructor(node: InputNode, bindings: BindingSet, inputName: string) {
+        super(bindings);
         this.node = node;
         this.inputName = inputName;
         // this.dfnode = dfnode;
@@ -493,10 +502,9 @@ function evalAssign(cell: AssignCell, env: Environment, bindings: BindingSet): v
     const variable = env.resolveRef(cell.node.ref, cell.node.range);
 
     const valueCell = evalTracing(cell.node.body, env, cell, bindings);
-    // const value = valueCell.value;
-    // variable.value = value;
     variable.cell = valueCell;
-    new WriteCell(bindings, cell, variable, valueCell);
+    const writeCell = new WriteCell(bindings, variable, valueCell);
+    cell.addChild(writeCell);
 }
 
 function evalIf(cell: IfCell, env: Environment, bindings: BindingSet): void {
@@ -560,15 +568,11 @@ function evalApply(cell: ApplyCell, env: Environment, bindings: BindingSet): voi
 function evalVariable(cell: VariableCell, env: Environment, bindings: BindingSet): void {
     cell.clear();
     const variable = env.resolveRef(cell.node.ref, cell.node.range);
-    // const cell = new ReadCell(bindings, parent, variable);
     const valueCell = variable.cell;
     if (valueCell === undefined)
         throw new Error("Variable " + variable.slot.name + " does not have a cell");
-    // const value = variable.value;
-    // const value = valueCell.value;
-    // cell.value = value;
-    // return cell;
-    new ReadCell(bindings, cell, variable);
+    const readCell = new ReadCell(bindings, variable);
+    cell.addChild(readCell);
     cell.value = valueCell.value;
 }
 
@@ -595,7 +599,9 @@ function evalInput(cell: InputCell, env: Environment, bindings: BindingSet): voi
 export function evalTracing(node: ASTNode, env: Environment, parent: Cell | null, bindings: BindingSet): Cell {
     switch (node.kind) {
         case "constant": {
-            const cell = new ConstantCell(node, bindings, parent);
+            const cell = new ConstantCell(node, bindings);
+            if (parent !== null)
+                parent.addChild(cell);
             evalConstant(cell, env, bindings);
             return cell;
         }
@@ -606,42 +612,58 @@ export function evalTracing(node: ASTNode, env: Environment, parent: Cell | null
             throw new Error("Exceptions are not supported in tracing evaluation mode");
         }
         case "assign": {
-            const cell = new AssignCell(node, bindings, parent);
+            const cell = new AssignCell(node, bindings);
+            if (parent !== null)
+                parent.addChild(cell);
             evalAssign(cell, env, bindings);
             return cell;
         }
         case "if": {
-            const cell = new IfCell(node, bindings, parent);
+            const cell = new IfCell(node, bindings);
+            if (parent !== null)
+                parent.addChild(cell);
             evalIf(cell, env, bindings);
             return cell;
         }
         case "lambda": {
-            const cell = new LambdaCell(node, bindings, parent);
+            const cell = new LambdaCell(node, bindings);
+            if (parent !== null)
+                parent.addChild(cell);
             evalLambda(cell, env, bindings);
             return cell;
         }
         case "sequence": {
-            const cell = new SequenceCell(node, bindings, parent);
+            const cell = new SequenceCell(node, bindings);
+            if (parent !== null)
+                parent.addChild(cell);
             evalSequence(cell, env, bindings);
             return cell;
         }
         case "apply": {
-            const cell = new ApplyCell(node, bindings, parent);
+            const cell = new ApplyCell(node, bindings);
+            if (parent !== null)
+                parent.addChild(cell);
             evalApply(cell, env, bindings);
             return cell;
         }
         case "variable": {
-            const cell = new VariableCell(node, bindings, parent);
+            const cell = new VariableCell(node, bindings);
+            if (parent !== null)
+                parent.addChild(cell);
             evalVariable(cell, env, bindings);
             return cell;
         }
         case "letrec": {
-            const cell = new LetrecCell(node, bindings, parent);
+            const cell = new LetrecCell(node, bindings);
+            if (parent !== null)
+                parent.addChild(cell);
             evalLetrec(cell, env, bindings);
             return cell;
         }
         case "input": {
-            const cell = new InputCell(node, bindings, parent, node.name);
+            const cell = new InputCell(node, bindings, node.name);
+            if (parent !== null)
+                parent.addChild(cell);
             evalInput(cell, env, bindings);
             return cell;
         }
@@ -670,7 +692,9 @@ function evalCall(cell: CallCell, bindings: BindingSet): void {
 
 export function evalLambdaTracing(procValue: LambdaProcedureValue, argCells: Cell[],
     range: SourceRange, parent: Cell, bindings: BindingSet): Cell {
-    const cell = new CallCell(procValue, argCells, range, bindings, parent);
+    const cell = new CallCell(procValue, argCells, range, bindings);
+    if (parent !== null)
+        parent.addChild(cell);
     evalCall(cell, bindings);
     return cell;
 }
