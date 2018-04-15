@@ -315,7 +315,7 @@ function main(): void {
                     let counter = 0; // tslint:disable-line:prefer-const
 
                     // console.log("");
-                    Value.currentGeneration = counter;
+                    Value.currentGeneration = 0;
                     createInput("test", new NumberValue(counter));
                     const resultCell = evalTracing(built, topLevelEnv, null, bindings);
                     // console.log("result = " + resultCell.value);
@@ -341,6 +341,9 @@ function main(): void {
                     const initialStr = "Initial evaluation\n" + resultCell.treeToString();
                     console.log(pageString(initialStr, options.height));
                     updateInput("test", new NumberValue(1));
+
+                    const secondStr = "Second\n" + resultCell.treeToString();
+                    console.log(pageString(secondStr, options.height));
 
                     // const first = "First\n" + executionTreeStr;
                     // const second = "Second\n" + executionTreeStr;

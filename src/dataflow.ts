@@ -131,7 +131,7 @@ export abstract class DataflowNode {
 
     public updateValue(newValue: Value): void {
         if (this.value !== newValue) {
-            this.trace("value changed: " + this.value + " -> " + newValue);
+            // this.trace("value changed: " + this.value + " -> " + newValue);
             this.value = newValue;
             this.markOutputsAsDirty();
         }
@@ -461,8 +461,11 @@ export class LetrecDataflowNode extends DataflowNode {
     }
 }
 
+export type ValueChangeListener = (oldValue: Value, newValue: Value) => void;
+
 export class InputDataflowNode extends DataflowNode {
     public readonly _class_InputDataflowNode: any;
+    private changeListeners: ValueChangeListener[] = [];
 
     public constructor(initialValue: Value) {
         super();
@@ -475,6 +478,30 @@ export class InputDataflowNode extends DataflowNode {
 
     public detach(): void {
         // Nothing to do here
+    }
+
+    public addChangeListener(listener: ValueChangeListener): void {
+        const index = this.changeListeners.indexOf(listener);
+        if (index >= 0)
+            throw new Error("Change listener already registered");
+        this.changeListeners.push(listener);
+    }
+
+    public removeChangeListener(listener: ValueChangeListener): void {
+        const index = this.changeListeners.indexOf(listener);
+        if (index < 0)
+            throw new Error("Change listener not registered");
+        this.changeListeners.splice(index, 1);
+    }
+
+    public updateValue(newValue: Value): void {
+        const oldValue = this.value;
+        super.updateValue(newValue);
+        if (oldValue !== newValue) {
+            const changeListeners = this.changeListeners.slice();
+            for (const listener of changeListeners)
+                listener(oldValue, newValue);
+        }
     }
 }
 

@@ -4,7 +4,7 @@ import { SourceRange } from "./source";
 import { Value, ErrorValue, UnspecifiedValue } from "./value";
 import { Variable, Environment, SchemeException } from "./runtime";
 import { BuiltinProcedureValue } from "./builtins";
-import { getInput } from "./dataflow";
+import { getInput, InputDataflowNode, ValueChangeListener } from "./dataflow";
 
 export interface CellWriter {
     println(msg: string[]): void;
@@ -44,6 +44,28 @@ export class BindingSet {
     }
 }
 
+export function removeEscapeCodes(input: string) {
+    let output: string = "";
+    let pos = 0;
+    while (pos < input.length) {
+        if (input[pos] === "\x1b") {
+            pos++;
+            if (input[pos] === "[") {
+                pos++;
+                while ((input[pos] >= "0") && (input[pos] <= "9"))
+                    pos++;
+                if (input[pos] === "m")
+                    pos++;
+            }
+        }
+        else {
+            output += input[pos];
+            pos++;
+        }
+    }
+    return output;
+}
+
 export abstract class Cell {
     public readonly _class_Cell: any;
     public value: Value;
@@ -53,6 +75,7 @@ export abstract class Cell {
     public readonly id: number;
     private static nextId: number = 0;
     private liveBindings: BindingSet;
+    public isDirty: boolean = false;
 
     public constructor(bindings: BindingSet, parent: Cell | null, value?: Value) {
         this.liveBindings = bindings.clone();
@@ -84,7 +107,10 @@ export abstract class Cell {
             children = cell.children;
         }
 
-        const line = prefix + "#" + cell.id + " " + cell.name;
+        let name = cell.name;
+        if (cell.isDirty)
+            name = "\x1b[7m" + name + "\x1b[0m";
+        const line = prefix + "#" + cell.id + " " + name;
         const entries = Array.from(cell.liveBindings.bindings.entries()).sort(([a, ac], [b, bc]) => {
             if (a.slot.name < b.slot.name)
                 return -1;
@@ -146,11 +172,18 @@ export abstract class Cell {
             widths.push(0);
         for (let lineno = 0; lineno < lineParts.length; lineno++) {
             for (let col = 0; col < lineParts[lineno].length; col++)
-                widths[col] = Math.max(widths[col], lineParts[lineno][col].length);
+                widths[col] = Math.max(widths[col], removeEscapeCodes(lineParts[lineno][col]).length);
         }
         for (let lineno = 0; lineno < lineParts.length; lineno++) {
-            for (let col = 0; col < lineParts[lineno].length; col++)
-                lineParts[lineno][col] = lineParts[lineno][col].padEnd(widths[col]);
+            for (let col = 0; col < lineParts[lineno].length; col++) {
+                let str = lineParts[lineno][col];
+                let len = removeEscapeCodes(str).length;
+                while (len < widths[col]) {
+                    str += " ";
+                    len++;
+                }
+                lineParts[lineno][col] = str;
+            }
         }
         const actualLines = lineParts.map(cols => cols.join(" "));
         return actualLines.join("\n");
@@ -161,6 +194,19 @@ export abstract class Cell {
             vars.add(this.variable);
         for (const child of this.children)
             child.findVars(vars);
+    }
+
+    public release(): void {
+        for (const child of this.children)
+            child.release();
+    }
+
+    public markDirty(): void {
+        let cell: Cell | null = this;
+        while ((cell !== null) && !cell.isDirty) {
+            cell.isDirty = true;
+            cell = cell.parent;
+        }
     }
 }
 
@@ -334,14 +380,27 @@ export class InputCell extends Cell {
     public readonly _class_InputCell: any;
     public readonly kind: "input" = "input";
     public readonly inputName: string;
+    public readonly dfnode: InputDataflowNode;
+    private listener: ValueChangeListener;
 
-    public constructor(bindings: BindingSet, parent: Cell | null, inputName: string) {
+    public constructor(bindings: BindingSet, parent: Cell | null, inputName: string, dfnode: InputDataflowNode) {
         super(bindings, parent);
         this.inputName = inputName;
+        this.dfnode = dfnode;
+        this.listener = (oldValue, newValue) => {
+            // console.log("input cell value changed: " + oldValue + " -> " + newValue);
+            this.markDirty();
+        };
+        this.dfnode.addChangeListener(this.listener);
     }
 
     public get name(): string {
         return "input[" + JSON.stringify(this.inputName) + "]";
+    }
+
+    public release(): void {
+        this.dfnode.removeChangeListener(this.listener);
+        super.release();
     }
 }
 
@@ -460,9 +519,9 @@ export function evalTracing(node: ASTNode, env: Environment, parent: Cell | null
             return cell;
         }
         case "input": {
-            const cell = new InputCell(bindings, parent, node.name);
-            const inputDataflowNode = getInput(node.name);
-            cell.value = inputDataflowNode.value;
+            const dfnode = getInput(node.name);
+            const cell = new InputCell(bindings, parent, node.name, dfnode);
+            cell.value = dfnode.value;
             return cell;
         }
     }
