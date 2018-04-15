@@ -501,7 +501,8 @@ function evalAssign(cell: AssignCell, env: Environment, bindings: BindingSet): v
     cell.clear();
     const variable = env.resolveRef(cell.node.ref, cell.node.range);
 
-    const valueCell = evalTracing(cell.node.body, env, cell, bindings);
+    const valueCell = evalTracing(cell.node.body, env, bindings);
+    cell.addChild(valueCell);
     variable.cell = valueCell;
     const writeCell = new WriteCell(bindings, variable, valueCell);
     cell.addChild(writeCell);
@@ -509,15 +510,18 @@ function evalAssign(cell: AssignCell, env: Environment, bindings: BindingSet): v
 
 function evalIf(cell: IfCell, env: Environment, bindings: BindingSet): void {
     cell.clear();
-    const condValueCell = evalTracing(cell.node.condition, env, cell, bindings);
+    const condValueCell = evalTracing(cell.node.condition, env, bindings);
+    cell.addChild(condValueCell);
     const condValue = condValueCell.value;
     if (condValue.isTrue()) {
-        const branchCell = evalTracing(cell.node.consequent, env, cell, bindings);
+        const branchCell = evalTracing(cell.node.consequent, env, bindings);
+        cell.addChild(branchCell);
         const branchValue = branchCell.value;
         cell.value = branchValue;
     }
     else {
-        const branchCell = evalTracing(cell.node.alternative, env, cell, bindings);
+        const branchCell = evalTracing(cell.node.alternative, env, bindings);
+        cell.addChild(branchCell);
         const branchValue = branchCell.value;
         cell.value = branchValue;
     }
@@ -530,21 +534,24 @@ function evalLambda(cell: LambdaCell, env: Environment, bindings: BindingSet): v
 
 function evalSequence(cell: SequenceCell, env: Environment, bindings: BindingSet): void {
     cell.clear();
-    const ignoreCell = evalTracing(cell.node.body, env, cell, bindings);
-    void ignoreCell;
-    const resultCell = evalTracing(cell.node.next, env, cell, bindings);
+    const ignoreCell = evalTracing(cell.node.body, env, bindings);
+    cell.addChild(ignoreCell);
+    const resultCell = evalTracing(cell.node.next, env, bindings);
+    cell.addChild(resultCell);
     const resultValue = resultCell.value;
     cell.value = resultValue;
 }
 
 function evalApply(cell: ApplyCell, env: Environment, bindings: BindingSet): void {
     cell.clear();
-    const procCell = evalTracing(cell.node.proc, env, cell, bindings);
+    const procCell = evalTracing(cell.node.proc, env, bindings);
+    cell.addChild(procCell);
     const procValue = procCell.value;
     const argCells: Cell[] = [];
     for (let i = 0; i < cell.node.args.length; i++) {
         const arg = cell.node.args[i];
-        const argCell = evalTracing(arg, env, cell, bindings);
+        const argCell = evalTracing(arg, env, bindings);
+        cell.addChild(argCell);
         argCells.push(argCell);
     }
 
@@ -581,11 +588,13 @@ function evalLetrec(cell: LetrecCell, env: Environment, bindings: BindingSet): v
     const innerEnv = new Environment(cell.node.innerScope, env);
     const cellArray: Cell[] = [];
     for (const binding of cell.node.bindings) {
-        const varCell = evalTracing(binding.body, innerEnv, cell, bindings);
+        const varCell = evalTracing(binding.body, innerEnv, bindings);
+        cell.addChild(varCell);
         cellArray.push(varCell);
     }
     innerEnv.setVariableCells(cellArray);
-    const bodyCell = evalTracing(cell.node.body, innerEnv, cell, bindings);
+    const bodyCell = evalTracing(cell.node.body, innerEnv, bindings);
+    cell.addChild(bodyCell);
     const bodyValue = bodyCell.value;
     cell.value = bodyValue;
 }
@@ -596,12 +605,10 @@ function evalInput(cell: InputCell, env: Environment, bindings: BindingSet): voi
     cell.value = dfnode.value;
 }
 
-export function evalTracing(node: ASTNode, env: Environment, parent: Cell | null, bindings: BindingSet): Cell {
+export function evalTracing(node: ASTNode, env: Environment, bindings: BindingSet): Cell {
     switch (node.kind) {
         case "constant": {
             const cell = new ConstantCell(node, bindings);
-            if (parent !== null)
-                parent.addChild(cell);
             evalConstant(cell, env, bindings);
             return cell;
         }
@@ -613,57 +620,41 @@ export function evalTracing(node: ASTNode, env: Environment, parent: Cell | null
         }
         case "assign": {
             const cell = new AssignCell(node, bindings);
-            if (parent !== null)
-                parent.addChild(cell);
             evalAssign(cell, env, bindings);
             return cell;
         }
         case "if": {
             const cell = new IfCell(node, bindings);
-            if (parent !== null)
-                parent.addChild(cell);
             evalIf(cell, env, bindings);
             return cell;
         }
         case "lambda": {
             const cell = new LambdaCell(node, bindings);
-            if (parent !== null)
-                parent.addChild(cell);
             evalLambda(cell, env, bindings);
             return cell;
         }
         case "sequence": {
             const cell = new SequenceCell(node, bindings);
-            if (parent !== null)
-                parent.addChild(cell);
             evalSequence(cell, env, bindings);
             return cell;
         }
         case "apply": {
             const cell = new ApplyCell(node, bindings);
-            if (parent !== null)
-                parent.addChild(cell);
             evalApply(cell, env, bindings);
             return cell;
         }
         case "variable": {
             const cell = new VariableCell(node, bindings);
-            if (parent !== null)
-                parent.addChild(cell);
             evalVariable(cell, env, bindings);
             return cell;
         }
         case "letrec": {
             const cell = new LetrecCell(node, bindings);
-            if (parent !== null)
-                parent.addChild(cell);
             evalLetrec(cell, env, bindings);
             return cell;
         }
         case "input": {
             const cell = new InputCell(node, bindings, node.name);
-            if (parent !== null)
-                parent.addChild(cell);
             evalInput(cell, env, bindings);
             return cell;
         }
@@ -685,7 +676,8 @@ function evalCall(cell: CallCell, bindings: BindingSet): void {
 
     const innerEnv = new Environment(lambdaNode.innerScope, outerEnv);
     innerEnv.setVariableCells(cell.argCells);
-    const bodyCell = evalTracing(cell.procValue.proc.body, innerEnv, cell, bindings);
+    const bodyCell = evalTracing(cell.procValue.proc.body, innerEnv, bindings);
+    cell.addChild(bodyCell);
     const bodyValue = bodyCell.value;
     cell.value = bodyValue;
 }

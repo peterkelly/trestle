@@ -317,7 +317,7 @@ function main(): void {
                     // console.log("");
                     Value.currentGeneration = 0;
                     createInput("test", new NumberValue(counter));
-                    const resultCell = evalTracing(built, topLevelEnv, null, bindings);
+                    const resultCell = evalTracing(built, topLevelEnv, bindings);
                     // console.log("result = " + resultCell.value);
 
                     // Find user variables
