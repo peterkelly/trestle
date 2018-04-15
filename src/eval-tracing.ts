@@ -1,4 +1,19 @@
-import { ASTNode, LambdaProcedureValue } from "./ast";
+import {
+    ASTNode,
+    LambdaProcedureValue,
+
+    ConstantNode,
+    TryNode,
+    ThrowNode,
+    AssignNode,
+    IfNode,
+    LambdaNode,
+    SequenceNode,
+    ApplyNode,
+    VariableNode,
+    LetrecNode,
+    InputNode,
+} from "./ast";
 import { BuildError } from "./sexpr";
 import { SourceRange } from "./source";
 import { Value, ErrorValue, UnspecifiedValue } from "./value";
@@ -208,6 +223,12 @@ export abstract class Cell {
             cell = cell.parent;
         }
     }
+
+    public clear(): void {
+        for (const child of this.children)
+            child.release();
+        this.children.length = 0;
+    }
 }
 
 export class SimpleCell extends Cell {
@@ -404,11 +425,99 @@ export class InputCell extends Cell {
     }
 }
 
+function evalConstant(node: ConstantNode, cell: ConstantCell, env: Environment, bindings: BindingSet): void {
+    cell.clear();
+    cell.value = node.value.toValue();
+}
+
+function evalAssign(node: AssignNode, cell: SetCell, env: Environment, bindings: BindingSet): void {
+    cell.clear();
+    const variable = env.resolveRef(node.ref, node.range);
+
+    const valueCell = evalTracing(node.body, env, cell, bindings);
+    // const value = valueCell.value;
+    // variable.value = value;
+    variable.cell = valueCell;
+    new WriteCell(bindings, cell, variable, valueCell);
+}
+
+function evalIf(node: IfNode, cell: IfCell, env: Environment, bindings: BindingSet): void {
+    cell.clear();
+    const condValueCell = evalTracing(node.condition, env, cell, bindings);
+    const condValue = condValueCell.value;
+    if (condValue.isTrue()) {
+        const branchCell = evalTracing(node.consequent, env, cell, bindings);
+        const branchValue = branchCell.value;
+        cell.value = branchValue;
+    }
+    else {
+        const branchCell = evalTracing(node.alternative, env, cell, bindings);
+        const branchValue = branchCell.value;
+        cell.value = branchValue;
+    }
+}
+
+function evalLambda(node: LambdaNode, cell: LambdaCell, env: Environment, bindings: BindingSet): void {
+    cell.clear();
+    cell.value = new LambdaProcedureValue(env, node);
+}
+
+function evalSequence(node: SequenceNode, cell: SequenceCell, env: Environment, bindings: BindingSet): void {
+    cell.clear();
+    const ignoreCell = evalTracing(node.body, env, cell, bindings);
+    void ignoreCell;
+    const resultCell = evalTracing(node.next, env, cell, bindings);
+    const resultValue = resultCell.value;
+    cell.value = resultValue;
+}
+
+function evalApply(node: ApplyNode, cell: ApplyCell, env: Environment, bindings: BindingSet): void {
+    cell.clear();
+    const procCell = evalTracing(node.proc, env, cell, bindings);
+    const procValue = procCell.value;
+    const argCells: Cell[] = [];
+    for (let i = 0; i < node.args.length; i++) {
+        const arg = node.args[i];
+        const argCell = evalTracing(arg, env, cell, bindings);
+        argCells.push(argCell);
+    }
+
+    if (procValue instanceof BuiltinProcedureValue) {
+        const argValues = argCells.map(cell => cell.value);
+        const resultValue = procValue.direct(argValues);
+        cell.value = resultValue;
+    }
+    else if (procValue instanceof LambdaProcedureValue) {
+        const resultCell = evalLambdaTracing(procValue, argCells, node.range, cell, bindings);
+        const resultValue = resultCell.value;
+        cell.value = resultValue;
+    }
+    else {
+        const msg = "Cannot apply " + procValue;
+        const error = new BuildError(node.range, msg);
+        throw new SchemeException(new ErrorValue(error));
+    }
+}
+
+function evalLetrec(node: LetrecNode, cell: LetrecCell, env: Environment, bindings: BindingSet): void {
+    cell.clear();
+    const innerEnv = new Environment(node.innerScope, env);
+    const cellArray: Cell[] = [];
+    for (const binding of node.bindings) {
+        const varCell = evalTracing(binding.body, innerEnv, cell, bindings);
+        cellArray.push(varCell);
+    }
+    innerEnv.setVariableCells(cellArray);
+    const bodyCell = evalTracing(node.body, innerEnv, cell, bindings);
+    const bodyValue = bodyCell.value;
+    cell.value = bodyValue;
+}
+
 export function evalTracing(node: ASTNode, env: Environment, parent: Cell | null, bindings: BindingSet): Cell {
     switch (node.kind) {
         case "constant": {
             const cell = new ConstantCell(bindings, parent);
-            cell.value = node.value.toValue();
+            evalConstant(node, cell, env, bindings);
             return cell;
         }
         case "try": {
@@ -418,77 +527,28 @@ export function evalTracing(node: ASTNode, env: Environment, parent: Cell | null
             throw new Error("Exceptions are not supported in tracing evaluation mode");
         }
         case "assign": {
-            const variable = env.resolveRef(node.ref, node.range);
             const cell = new SetCell(bindings, parent);
-
-            const valueCell = evalTracing(node.body, env, cell, bindings);
-            // const value = valueCell.value;
-            // variable.value = value;
-            variable.cell = valueCell;
-            new WriteCell(bindings, cell, variable, valueCell);
+            evalAssign(node, cell, env, bindings);
             return cell;
         }
         case "if": {
             const cell = new IfCell(bindings, parent);
-            const condValueCell = evalTracing(node.condition, env, cell, bindings);
-            const condValue = condValueCell.value;
-            if (condValue.isTrue()) {
-                const branchCell = evalTracing(node.consequent, env, cell, bindings);
-                const branchValue = branchCell.value;
-                cell.value = branchValue;
-            }
-            else {
-                const branchCell = evalTracing(node.alternative, env, cell, bindings);
-                const branchValue = branchCell.value;
-                cell.value = branchValue;
-            }
+            evalIf(node, cell, env, bindings);
             return cell;
         }
         case "lambda": {
             const cell = new LambdaCell(bindings, parent);
-            cell.value = new LambdaProcedureValue(env, node);
+            evalLambda(node, cell, env, bindings);
             return cell;
         }
         case "sequence": {
-            let cell: Cell;
-            // if ((parent !== null) && (parent instanceof SequenceCell))
-            //     cell = parent;
-            // else
-                cell = new SequenceCell(bindings, parent);
-            // const cell = new SequenceCell(bindings, parent);
-            const ignoreCell = evalTracing(node.body, env, cell, bindings);
-            void ignoreCell;
-            const resultCell = evalTracing(node.next, env, cell, bindings);
-            const resultValue = resultCell.value;
-            cell.value = resultValue;
+            let cell = new SequenceCell(bindings, parent);
+            evalSequence(node, cell, env, bindings);
             return cell;
         }
         case "apply": {
             const cell = new ApplyCell(bindings, parent);
-            const procCell = evalTracing(node.proc, env, cell, bindings);
-            const procValue = procCell.value;
-            const argCells: Cell[] = [];
-            for (let i = 0; i < node.args.length; i++) {
-                const arg = node.args[i];
-                const argCell = evalTracing(arg, env, cell, bindings);
-                argCells.push(argCell);
-            }
-
-            if (procValue instanceof BuiltinProcedureValue) {
-                const argValues = argCells.map(cell => cell.value);
-                const resultValue = procValue.direct(argValues);
-                cell.value = resultValue;
-            }
-            else if (procValue instanceof LambdaProcedureValue) {
-                const resultCell = evalLambdaTracing(procValue, argCells, node.range, cell, bindings);
-                const resultValue = resultCell.value;
-                cell.value = resultValue;
-            }
-            else {
-                const msg = "Cannot apply " + procValue;
-                const error = new BuildError(node.range, msg);
-                throw new SchemeException(new ErrorValue(error));
-            }
+            evalApply(node, cell, env, bindings);
             return cell;
         }
         case "variable": {
@@ -506,16 +566,7 @@ export function evalTracing(node: ASTNode, env: Environment, parent: Cell | null
         }
         case "letrec": {
             const cell = new LetrecCell(bindings, parent);
-            const innerEnv = new Environment(node.innerScope, env);
-            const cellArray: Cell[] = [];
-            for (const binding of node.bindings) {
-                const varCell = evalTracing(binding.body, innerEnv, cell, bindings);
-                cellArray.push(varCell);
-            }
-            innerEnv.setVariableCells(cellArray);
-            const bodyCell = evalTracing(node.body, innerEnv, cell, bindings);
-            const bodyValue = bodyCell.value;
-            cell.value = bodyValue;
+            evalLetrec(node, cell, env, bindings);
             return cell;
         }
         case "input": {
