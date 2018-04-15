@@ -84,21 +84,19 @@ export abstract class Cell {
             children = cell.children;
         }
 
-        let line = prefix + "#" + cell.id + " " + cell.name;
-        // if ((options.width !== undefined) && (cell.liveBindings !== undefined)) {
-            const entries = Array.from(cell.liveBindings.bindings.entries()).sort(([a, ac], [b, bc]) => {
-                if (a.slot.name < b.slot.name)
-                    return -1;
-                else if (a.slot.name > b.slot.name)
-                    return 1;
-                else
-                    return 0;
-            }).map(([key, value]) => value);
-            // line = line.padEnd(options.width) + " |";
-            let varColumn = "";
-            for (const binding of entries)
-                varColumn += " " + binding.variable.slot.name + "=#" + binding.cell.id + "=" + binding.cell.value;
-        // }
+        const line = prefix + "#" + cell.id + " " + cell.name;
+        const entries = Array.from(cell.liveBindings.bindings.entries()).sort(([a, ac], [b, bc]) => {
+            if (a.slot.name < b.slot.name)
+                return -1;
+            else if (a.slot.name > b.slot.name)
+                return 1;
+            else
+                return 0;
+        }).map(([key, value]) => value);
+        let varColumn = "";
+        for (const binding of entries)
+            varColumn += " " + binding.variable.slot.name + "=#" + binding.cell.id + "=" + binding.cell.value;
+
         writer.println([line, varColumn]);
         for (let i = 0; i < children.length; i++) {
             let childPrefix: string;

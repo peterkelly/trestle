@@ -323,7 +323,7 @@ function main(): void {
                     // Find user variables
                     const varSet = new Set<Variable>();
                     resultCell.findVars(varSet);
-                    const allVars = Array.from(varSet).sort((a, b) => {
+                    const allVars = Array.from(varSet).sort((a, b) => { // tslint:disable-line:no-unused-variable
                         if (a.slot.name < b.slot.name)
                             return -1;
                         else if (a.slot.name > b.slot.name)
@@ -331,7 +331,7 @@ function main(): void {
                         else
                             return 0;
                     });
-                    const userVars = allVars.filter(v => !v.builtin);
+                    const userVars = allVars.filter(v => !v.builtin); // tslint:disable-line:no-unused-variable
                     // console.log("all vars: " + allVars.map(v => v.slot.name).join(" "));
                     // console.log("vars: " + userVars.map(v => v.slot.name).join(" "));
 
