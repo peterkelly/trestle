@@ -552,6 +552,8 @@ export class LetrecCell extends Cell {
     }
 
     public evaluate(env: Environment, bindings: BindingSet): void {
+        // FIXME: Need to create cells for each entry, and record the assignments that happen
+        // when initialising the inner environment. Similarly for lambda.
         this.clear();
         const innerEnv = new Environment(this.node.innerScope, env);
         const cellArray: Cell[] = [];

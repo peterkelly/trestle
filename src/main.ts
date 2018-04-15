@@ -317,7 +317,7 @@ function main(): void {
                     // console.log("");
                     Value.currentGeneration = 0;
                     createInput("test", new NumberValue(counter));
-                    const resultCell = evalTracing(built, topLevelEnv, bindings);
+                    const resultCell = evalTracing(built, topLevelEnv, bindings.clone());
                     // console.log("result = " + resultCell.value);
 
                     // Find user variables
@@ -342,8 +342,22 @@ function main(): void {
                     console.log(pageString(initialStr, options.height));
                     updateInput("test", new NumberValue(1));
 
-                    const secondStr = "Second\n" + resultCell.treeToString();
-                    console.log(pageString(secondStr, options.height));
+                    const dirty1Str = "Dirty 1\n" + resultCell.treeToString();
+                    console.log(pageString(dirty1Str, options.height));
+
+                    resultCell.evaluate(topLevelEnv, bindings.clone());
+                    const updated1Str = "Updated 1\n" + resultCell.treeToString();
+                    console.log(pageString(updated1Str, options.height));
+
+                    updateInput("test", new NumberValue(2));
+
+
+                    const dirty2Str = "Dirty 2\n" + resultCell.treeToString();
+                    console.log(pageString(dirty2Str, options.height));
+
+                    resultCell.evaluate(topLevelEnv, bindings.clone());
+                    const updated2Str = "Updated 2\n" + resultCell.treeToString();
+                    console.log(pageString(updated2Str, options.height));
 
                     // const first = "First\n" + executionTreeStr;
                     // const second = "Second\n" + executionTreeStr;
