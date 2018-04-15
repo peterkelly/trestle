@@ -1,10 +1,7 @@
 import {
     ASTNode,
     LambdaProcedureValue,
-
     ConstantNode,
-    TryNode,
-    ThrowNode,
     AssignNode,
     IfNode,
     LambdaNode,
@@ -59,7 +56,7 @@ export class BindingSet {
     }
 }
 
-export function removeEscapeCodes(input: string) {
+export function removeEscapeCodes(input: string): string {
     let output: string = "";
     let pos = 0;
     while (pos < input.length) {
@@ -343,6 +340,19 @@ export class LambdaCell extends Cell {
     }
 }
 
+export class CallCell extends Cell {
+    public readonly _class_CallCell: any;
+    public readonly kind: "call" = "call";
+
+    public constructor(bindings: BindingSet, parent: Cell | null) {
+        super(bindings, parent);
+    }
+
+    public get name(): string {
+        return this.kind;
+    }
+}
+
 export class SequenceCell extends Cell {
     public readonly _class_SequenceCell: any;
     public readonly kind: "sequence" = "sequence";
@@ -369,8 +379,21 @@ export class ApplyCell extends Cell {
     }
 }
 
-export class ReadCell extends Cell {
+export class VariableCell extends Cell {
     public readonly _class_VariableCell: any;
+    public readonly kind: "variable" = "variable";
+
+    public constructor(bindings: BindingSet, parent: Cell | null) {
+        super(bindings, parent);
+    }
+
+    public get name(): string {
+        return this.kind;
+    }
+}
+
+export class ReadCell extends Cell {
+    public readonly _class_ReadCell: any;
     public readonly kind: "read" = "read";
     public readonly variable: Variable;
 
@@ -401,18 +424,18 @@ export class InputCell extends Cell {
     public readonly _class_InputCell: any;
     public readonly kind: "input" = "input";
     public readonly inputName: string;
-    public readonly dfnode: InputDataflowNode;
+    public dfnode: InputDataflowNode | null = null;
     private listener: ValueChangeListener;
 
-    public constructor(bindings: BindingSet, parent: Cell | null, inputName: string, dfnode: InputDataflowNode) {
+    public constructor(bindings: BindingSet, parent: Cell | null, inputName: string) {
         super(bindings, parent);
         this.inputName = inputName;
-        this.dfnode = dfnode;
+        // this.dfnode = dfnode;
         this.listener = (oldValue, newValue) => {
             // console.log("input cell value changed: " + oldValue + " -> " + newValue);
             this.markDirty();
         };
-        this.dfnode.addChangeListener(this.listener);
+        // this.dfnode.addChangeListener(this.listener);
     }
 
     public get name(): string {
@@ -420,8 +443,17 @@ export class InputCell extends Cell {
     }
 
     public release(): void {
-        this.dfnode.removeChangeListener(this.listener);
+        // this.dfnode.removeChangeListener(this.listener);
+        this.setDataflowNode(null);
         super.release();
+    }
+
+    public setDataflowNode(newNode: InputDataflowNode | null): void {
+        if (this.dfnode !== null)
+            this.dfnode.removeChangeListener(this.listener);
+        this.dfnode = newNode;
+        if (this.dfnode !== null)
+            this.dfnode.addChangeListener(this.listener);
     }
 }
 
@@ -499,6 +531,21 @@ function evalApply(node: ApplyNode, cell: ApplyCell, env: Environment, bindings:
     }
 }
 
+function evalVariable(node: VariableNode, cell: VariableCell, env: Environment, bindings: BindingSet): void {
+    cell.clear();
+    const variable = env.resolveRef(node.ref, node.range);
+    // const cell = new ReadCell(bindings, parent, variable);
+    const valueCell = variable.cell;
+    if (valueCell === undefined)
+        throw new Error("Variable " + variable.slot.name + " does not have a cell");
+    // const value = variable.value;
+    // const value = valueCell.value;
+    // cell.value = value;
+    // return cell;
+    new ReadCell(bindings, cell, variable);
+    cell.value = valueCell.value;
+}
+
 function evalLetrec(node: LetrecNode, cell: LetrecCell, env: Environment, bindings: BindingSet): void {
     cell.clear();
     const innerEnv = new Environment(node.innerScope, env);
@@ -511,6 +558,12 @@ function evalLetrec(node: LetrecNode, cell: LetrecCell, env: Environment, bindin
     const bodyCell = evalTracing(node.body, innerEnv, cell, bindings);
     const bodyValue = bodyCell.value;
     cell.value = bodyValue;
+}
+
+function evalInput(node: InputNode, cell: InputCell, env: Environment, bindings: BindingSet): void {
+    const dfnode = getInput(node.name);
+    cell.setDataflowNode(dfnode);
+    cell.value = dfnode.value;
 }
 
 export function evalTracing(node: ASTNode, env: Environment, parent: Cell | null, bindings: BindingSet): Cell {
@@ -542,7 +595,7 @@ export function evalTracing(node: ASTNode, env: Environment, parent: Cell | null
             return cell;
         }
         case "sequence": {
-            let cell = new SequenceCell(bindings, parent);
+            const cell = new SequenceCell(bindings, parent);
             evalSequence(node, cell, env, bindings);
             return cell;
         }
@@ -552,17 +605,9 @@ export function evalTracing(node: ASTNode, env: Environment, parent: Cell | null
             return cell;
         }
         case "variable": {
-            const variable = env.resolveRef(node.ref, node.range);
-            // const cell = new ReadCell(bindings, parent, variable);
-            const valueCell = variable.cell;
-            if (valueCell === undefined)
-                throw new Error("Variable " + variable.slot.name + " does not have a cell");
-            // const value = variable.value;
-            // const value = valueCell.value;
-            // cell.value = value;
-            // return cell;
-            new ReadCell(bindings, parent, variable);
-            return valueCell;
+            const cell = new VariableCell(bindings, parent);
+            evalVariable(node, cell, env, bindings);
+            return cell;
         }
         case "letrec": {
             const cell = new LetrecCell(bindings, parent);
@@ -570,19 +615,19 @@ export function evalTracing(node: ASTNode, env: Environment, parent: Cell | null
             return cell;
         }
         case "input": {
-            const dfnode = getInput(node.name);
-            const cell = new InputCell(bindings, parent, node.name, dfnode);
-            cell.value = dfnode.value;
+            const cell = new InputCell(bindings, parent, node.name);
+            evalInput(node, cell, env, bindings);
             return cell;
         }
     }
 }
 
-export function evalLambdaTracing(procValue: LambdaProcedureValue, argCells: Cell[],
-    range: SourceRange, parent: Cell, bindings: BindingSet): Cell {
+function evalCall(cell: CallCell,
+    procValue: LambdaProcedureValue, argCells: Cell[],
+    range: SourceRange, parent: Cell, bindings: BindingSet): void {
+    cell.clear();
     const outerEnv = procValue.env;
     const lambdaNode = procValue.proc;
-    const cell = new LambdaCell(bindings, parent);
 
     const expectedArgCount = lambdaNode.variables.length;
     const actualArgCount = argCells.length;
@@ -597,5 +642,11 @@ export function evalLambdaTracing(procValue: LambdaProcedureValue, argCells: Cel
     const bodyCell = evalTracing(procValue.proc.body, innerEnv, cell, bindings);
     const bodyValue = bodyCell.value;
     cell.value = bodyValue;
+}
+
+export function evalLambdaTracing(procValue: LambdaProcedureValue, argCells: Cell[],
+    range: SourceRange, parent: Cell, bindings: BindingSet): Cell {
+    const cell = new CallCell(bindings, parent);
+    evalCall(cell, procValue, argCells, range, parent, bindings);
     return cell;
 }
