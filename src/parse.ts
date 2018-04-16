@@ -25,6 +25,8 @@ import {
 import {
     SourceLocation,
     SourceRange,
+    TextBuffer,
+    Cursor,
 } from "./source";
 
 function isDigitChar(c: string): boolean {
@@ -72,83 +74,83 @@ class ParseError extends Error {
 }
 
 export class Parser {
-    public readonly input: string;
-    public readonly len: number;
-    public pos: number;
+    public readonly buf: TextBuffer;
+    public csr: Cursor;
 
     public constructor(input: string) {
-        this.input = input;
-        this.len = input.length;
-        this.pos = 0;
+        this.buf = new TextBuffer(input);
+        this.csr = this.buf.createCursor();
     }
 
-    public getLocation(): SourceLocation {
-        return new SourceLocation(this.pos);
-    }
-
-    public getRangeFrom(start: SourceLocation): SourceRange {
-        return new SourceRange(start, this.getLocation());
-    }
-
-    public matchWhitespace(): void {
-        if ((this.pos < this.len) && isWhitespaceChar(this.input[this.pos])) {
-            this.skipWhitespace();
+    public matchChar(c: string): boolean {
+        if (!this.csr.atEnd() && (this.csr.current() === c)) {
+            this.csr.advance();
+            return true;
         }
         else {
-            throw new ParseError(this.getLocation(), "Expected whitespace");
+            return false;
+        }
+    }
+
+    public matchRange(min: string, max: string): boolean {
+        if (!this.csr.atEnd() && (this.csr.current() >= min) && (this.csr.current() <= max)) {
+            this.csr.advance();
+            return true;
+        }
+        else {
+            return false;
         }
     }
 
     public skipRestOfLine(): void {
-        while ((this.pos < this.len) && (this.input[this.pos] !== "\n"))
-            this.pos++;
-        if ((this.pos < this.len) && (this.input[this.pos] === "\n"))
-            this.pos++;
+        while (!this.matchChar("\n"))
+            this.csr.advance();
+        this.matchChar("\n");
     }
 
     public skipWhitespace(): void {
-        while (this.pos < this.len) {
-            if (this.input[this.pos] === ";")
+        while (!this.csr.atEnd()) {
+            if (this.csr.current() === ";")
                 this.skipRestOfLine();
-            else if (isWhitespaceChar(this.input[this.pos]))
-                this.pos++;
+            else if (isWhitespaceChar(this.csr.current()))
+                this.csr.advance();
             else
                 break;
         }
     }
 
     public parseNumber(): NumberExpr {
-        const start = this.pos;
-        while ((this.pos < this.len) && this.input[this.pos].match(/^[0-9]$/))
-            this.pos++;
-        if ((this.pos < this.len) && (this.input[this.pos] === ".")) {
-            this.pos++;
-            const decimalPartStart = this.pos;
-            while ((this.pos < this.len) && this.input[this.pos].match(/^[0-9]$/))
-                this.pos++;
-            if (this.pos === decimalPartStart)
-                throw new ParseError(this.getLocation(), "Malformed number: " + this.input.substring(start, this.pos));
+        const startLoc = this.csr.saveLocation();
+        while (this.matchRange("0", "9")) {
+            // repeat
         }
-        const str = this.input.substring(start, this.pos);
+        if (this.matchChar(".")) {
+            let decimalDigits = 0;
+            while (this.matchRange("0", "9")) {
+                // repeat
+                decimalDigits++;
+            }
+            if (decimalDigits === 0) {
+                const range = this.csr.getRangeFrom(startLoc);
+                throw new ParseError(this.csr.saveLocation(), "Malformed number: " + this.buf.textInRange(range));
+            }
+        }
+        const range = this.csr.getRangeFrom(startLoc);
+        const str = this.buf.textInRange(range);
         const num = parseFloat(str);
-        const range = this.getRangeFrom(new SourceLocation(start));
         return new NumberExpr(range, num);
     }
 
     public parseString(): StringExpr {
-        const start = this.pos;
-        if (!((this.pos < this.len) && (this.input[this.pos] === "\"")))
-            throw new ParseError(this.getLocation(), "Expected \"");
-        this.pos++;
+        const start = this.csr.saveLocation();
+        if (!this.matchChar("\""))
+            throw new ParseError(this.csr.saveLocation(), "Expected \"");
         let value = "";
-        while (true) {
-            if (this.pos >= this.len)
-                throw new ParseError(this.getLocation(), "Unexpected end of input");
-            if (this.input[this.pos] === "\\") {
-                this.pos++;
-                if (this.pos >= this.len)
-                    throw new ParseError(this.getLocation(), "Unexpected end of input");
-                switch (this.input[this.pos]) {
+        while (!this.csr.atEnd()) {
+            if (this.matchChar("\\")) {
+                if (this.csr.atEnd())
+                    throw new ParseError(this.csr.saveLocation(), "Unexpected end of input");
+                switch (this.csr.current()) {
                     case "n":
                         value += "\n";
                         break;
@@ -162,120 +164,114 @@ export class Parser {
                         value += "\\";
                         break;
                     default:
-                        value += this.input[this.pos];
+                        value += this.csr.current();
                         break;
                 }
             }
-            else if (this.input[this.pos] === "\"") {
-                this.pos++;
-                const range = this.getRangeFrom(new SourceLocation(start));
+            else if (this.matchChar("\"")) {
+                const range = this.csr.getRangeFrom(start);
                 return new StringExpr(range, value);
             }
             else {
-                value += this.input[this.pos];
+                value += this.csr.current();
             }
-            this.pos++;
+            this.csr.advance();
         }
+        throw new ParseError(this.csr.saveLocation(), "Unexpected end of input");
     }
 
     public parseSymbol(): SymbolExpr {
-        const start = this.pos;
-        while ((this.pos < this.len) && isSymbolChar(this.input[this.pos]))
-            this.pos++;
-        const name = this.input.substring(start, this.pos);
-        const range = this.getRangeFrom(new SourceLocation(start));
+        const start = this.csr.saveLocation();
+        while (!this.csr.atEnd() && isSymbolChar(this.csr.current()))
+            this.csr.advance();
+        const range = this.csr.getRangeFrom(start);
+        const name = this.buf.textInRange(range);
         return new SymbolExpr(range, name);
     }
 
     public parseQuote(): QuoteExpr {
-        const start = this.pos;
-        if (!((this.pos < this.len) && (this.input[this.pos] === "'")))
-            throw new ParseError(this.getLocation(), "Expected '");
-        this.pos++;
+        const start = this.csr.saveLocation();
+        if (!this.matchChar("'"))
+            throw new ParseError(this.csr.saveLocation(), "Expected '");
         const body = this.parseExpression();
-        const range = this.getRangeFrom(new SourceLocation(start));
+        const range = this.csr.getRangeFrom(start);
         return new QuoteExpr(range, body);
     }
 
     public parseList(): PairExpr | NilExpr {
-        const listStart = new SourceLocation(this.pos);
+        const listStart = this.csr.saveLocation();
         const items: SExpr[] = [];
-        if (!((this.pos < this.len) && (this.input[this.pos] === "(")))
-            throw new ParseError(this.getLocation(), "Expected (");
-        this.pos++;
+        if (!this.matchChar("("))
+            throw new ParseError(this.csr.saveLocation(), "Expected (");
         this.skipWhitespace();
+        let endLoc = this.csr.saveLocation();
         while (true) {
-            if (this.pos >= this.len)
-                throw new ParseError(this.getLocation(), "Unexpected end of input");
-            if (this.input[this.pos] === ")") {
-                this.pos++;
+            if (this.csr.atEnd())
+                throw new ParseError(this.csr.saveLocation(), "Unexpected end of input");
+            endLoc = this.csr.saveLocation();
+            if (this.matchChar(")"))
                 break;
-            }
             items.push(this.parseExpression());
             this.skipWhitespace();
         }
 
-        const endRange = this.getRangeFrom(new SourceLocation(this.pos - 1));
+        const endRange = this.csr.getRangeFrom(endLoc);
         const terminator = new NilExpr(endRange);
 
-        const listEnd = new SourceLocation(this.pos);
+        const listEnd = this.csr.saveLocation();
         const listRange = new SourceRange(listStart, listEnd);
         return sexprArrayToList(items, listRange, terminator);
-
     }
 
     public parseHash(): SExpr {
-        const start = this.getLocation();
-        if (!((this.pos < this.len) && (this.input[this.pos] === "#")))
+        const start = this.csr.saveLocation();
+        if (!this.matchChar("#"))
             throw new ParseError(start, "Expected #");
-        this.pos++;
-        if ((this.pos < this.len) && (this.input[this.pos] === "t")) {
-            this.pos++;
-            const range = this.getRangeFrom(start);
+        if (this.matchChar("t")) {
+            const range = this.csr.getRangeFrom(start);
             return new BooleanExpr(range, true);
         }
-        else if ((this.pos < this.len) && (this.input[this.pos] === "f")) {
-            this.pos++;
-            const range = this.getRangeFrom(start);
+        else if (this.matchChar("f")) {
+            const range = this.csr.getRangeFrom(start);
             return new BooleanExpr(range, false);
         }
-        else if (this.pos < this.len) {
-            throw new ParseError(start, "Unexpected input: #" + this.input[this.pos]);
+        else if (!this.csr.atEnd()) {
+            throw new ParseError(start, "Unexpected input: #" + this.csr.current());
         }
         else {
-            throw new ParseError(this.getLocation(), "Unexpected end of input");
+            throw new ParseError(this.csr.saveLocation(), "Unexpected end of input");
         }
     }
 
     public parseExpression(): SExpr {
-        if (this.pos >= this.len)
-            throw new ParseError(this.getLocation(), "Unexpected end of input");
-        if (isDigitChar(this.input[this.pos]))
+        if (this.csr.atEnd())
+            throw new ParseError(this.csr.saveLocation(), "Unexpected end of input");
+        if (isDigitChar(this.csr.current()))
             return this.parseNumber();
-        else if (this.input[this.pos] === "\"")
+        else if (this.csr.current() === "\"")
             return this.parseString();
-        else if (isSymbolChar(this.input[this.pos]))
+        else if (isSymbolChar(this.csr.current()))
             return this.parseSymbol();
-        else if (this.input[this.pos] === "'")
+        else if (this.csr.current() === "'")
             return this.parseQuote();
-        else if (this.input[this.pos] === "(")
+        else if (this.csr.current() === "(")
             return this.parseList();
-        else if (this.input[this.pos] === "#")
+        else if (this.csr.current() === "#")
             return this.parseHash();
         else
-            throw new ParseError(this.getLocation(), "Unexpected character: " + this.input[this.pos]);
+            throw new ParseError(this.csr.saveLocation(), "Unexpected character: " + this.csr.current());
     }
 
     public parseTopLevel(): PairExpr | NilExpr {
         const items: SExpr[] = [];
         this.skipWhitespace();
-        while (this.pos < this.len) {
+        while (!this.csr.atEnd()) {
             items.push(this.parseExpression());
             this.skipWhitespace();
         }
 
         const listStart = new SourceLocation(0);
-        const listEnd = new SourceLocation(this.pos);
+        const listEnd = this.csr.saveLocation();
         const endRange = new SourceRange(listStart.clone(), listEnd.clone());
         const terminator = new NilExpr(endRange);
         const listRange = new SourceRange(listStart, listEnd);

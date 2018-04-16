@@ -141,6 +141,67 @@ export class SourceInput {
     }
 }
 
+export class TextBufferData {
+    public _class_TextBuffer: any;
+    public readonly input: string;
+    public readonly len: number;
+    public constructor(input: string) {
+        this.input = input;
+        this.len = input.length;
+    }
+
+}
+
+export class TextBuffer {
+    public _class_TextBuffer: any;
+    private data: TextBufferData;
+
+    public constructor(input: string) {
+        this.data = new TextBufferData(input);
+    }
+
+    public textInRange(range: SourceRange): string {
+        return this.data.input.substring(range.start.offset, range.end.offset);
+    }
+
+    public createCursor(): Cursor {
+        return new Cursor(this.data);
+    }
+}
+
+export class Cursor {
+    public _class_Cursor: any;
+    private readonly data: TextBufferData;
+    public pos: number;
+
+    public constructor(data: TextBufferData) {
+        this.data = data;
+        this.pos = 0;
+    }
+
+    public saveLocation(): SourceLocation {
+        return new SourceLocation(this.pos);
+    }
+
+    public getRangeFrom(start: SourceLocation): SourceRange {
+        return new SourceRange(start, this.saveLocation());
+    }
+
+    public atEnd(): boolean {
+        return (this.pos >= this.data.len);
+    }
+
+    public current(): string {
+        if (this.atEnd())
+            throw new Error("Attempt to read beyond end of input");
+        return this.data.input[this.pos];
+    }
+
+    public advance(): void {
+        this.pos++;
+    }
+}
+
 export function testSourceCoords(): void {
     const testInput = "(define (fac n)\n  (if (= n 1)\r\n      1\n      (* n (fac (- n 1)))))\n";
     let hloffset: number | null = null;
