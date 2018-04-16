@@ -92,8 +92,24 @@ export function removeEscapeCodes(input: string): string {
     return output;
 }
 
-export function writeCell(cell: Cell, writer: CellWriter, prefix: string, indent: string, options: WriteOptions): void {
-    // let line = prefix + this.name;
+export function makeVarColumn(bindings: BindingSet): string {
+    const entries = Array.from(bindings.bindings.entries()).sort(([a, ac], [b, bc]) => {
+        if (a.slot.name < b.slot.name)
+            return -1;
+        else if (a.slot.name > b.slot.name)
+            return 1;
+        else
+            return 0;
+    }).map(([key, value]) => value);
+    let varColumn = "";
+    for (const binding of entries)
+        varColumn += " " + binding.variable.slot.name + "=#" + binding.cell.id + "=" + binding.cell.value;
+    return varColumn;
+}
+
+export function writeCell(cell: Cell, writer: CellWriter, prefix: string, indent: string,
+    bindings: BindingSet, options: WriteOptions): void {
+
     let children: Cell[];
     if (options.abbrev) {
         children = Cell.filterCellsForDisplay(cell.children);
@@ -110,17 +126,7 @@ export function writeCell(cell: Cell, writer: CellWriter, prefix: string, indent
     if (cell.isDirty)
         name = "\x1b[7m" + name + "\x1b[0m";
     const line = prefix + "#" + cell.id + " " + name;
-    const entries = Array.from(cell.liveBindings.bindings.entries()).sort(([a, ac], [b, bc]) => {
-        if (a.slot.name < b.slot.name)
-            return -1;
-        else if (a.slot.name > b.slot.name)
-            return 1;
-        else
-            return 0;
-    }).map(([key, value]) => value);
-    let varColumn = "";
-    for (const binding of entries)
-        varColumn += " " + binding.variable.slot.name + "=#" + binding.cell.id + "=" + binding.cell.value;
+    const varColumn = makeVarColumn(cell.liveBindings);
 
     writer.println([line, varColumn]);
     for (let i = 0; i < children.length; i++) {
@@ -135,11 +141,11 @@ export function writeCell(cell: Cell, writer: CellWriter, prefix: string, indent
             childIndent = indent + "    ";
         }
         const child = children[i];
-        writeCell(child, writer, childPrefix, childIndent, options);
+        writeCell(child, writer, childPrefix, childIndent, bindings, options);
     }
 }
 
-export function treeToString(root: Cell, options?: WriteOptions): string {
+export function treeToString(root: Cell, bindings: BindingSet, options?: WriteOptions): string {
     options = options || {};
     const lineParts: string[][] = [];
     let columns = 0;
@@ -149,7 +155,7 @@ export function treeToString(root: Cell, options?: WriteOptions): string {
             columns = Math.max(columns, msg.length);
         }
     };
-    writeCell(root, writer, "", "", options);
+    writeCell(root, writer, "", "", bindings, options);
     const widths: number[] = [];
     for (let i = 0; i < columns; i++)
         widths.push(0);

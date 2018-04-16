@@ -338,25 +338,25 @@ function main(): void {
                     // Print execution tree
                     // const executionTreeStr = treeToString(resultCell);
                     // console.log(executionTreeStr);
-                    const initialStr = "Initial evaluation\n" + treeToString(resultCell);
+                    const initialStr = "Initial evaluation\n" + treeToString(resultCell, bindings);
                     console.log(pageString(initialStr, options.height));
                     updateInput("test", new NumberValue(1));
 
-                    const dirty1Str = "Dirty 1\n" + treeToString(resultCell);
+                    const dirty1Str = "Dirty 1\n" + treeToString(resultCell, bindings);
                     console.log(pageString(dirty1Str, options.height));
 
                     resultCell.evaluate(topLevelEnv, bindings.clone());
-                    const updated1Str = "Updated 1\n" + treeToString(resultCell);
+                    const updated1Str = "Updated 1\n" + treeToString(resultCell, bindings);
                     console.log(pageString(updated1Str, options.height));
 
                     updateInput("test", new NumberValue(2));
 
 
-                    const dirty2Str = "Dirty 2\n" + treeToString(resultCell);
+                    const dirty2Str = "Dirty 2\n" + treeToString(resultCell, bindings);
                     console.log(pageString(dirty2Str, options.height));
 
                     resultCell.evaluate(topLevelEnv, bindings.clone());
-                    const updated2Str = "Updated 2\n" + treeToString(resultCell);
+                    const updated2Str = "Updated 2\n" + treeToString(resultCell, bindings);
                     console.log(pageString(updated2Str, options.height));
 
                     // const first = "First\n" + executionTreeStr;
