@@ -631,12 +631,19 @@ export class LetrecBindingCell extends Cell {
     public readonly variable: Variable;
     public readonly body: ASTNode;
     private readonly env: Environment;
+    private readonly varCell: Cell;
+    private readonly writeCell: Cell;
 
     public constructor(variable: Variable, body: ASTNode, env: Environment) {
         super();
         this.variable = variable;
         this.body = body;
         this.env = env;
+
+        this.varCell = createTracing(this.body, this.env);
+        this.writeCell = new WriteCell(this.variable, this.varCell);
+        this.addChild(this.varCell);
+        this.addChild(this.writeCell);
     }
 
     public get name(): string {
@@ -644,12 +651,8 @@ export class LetrecBindingCell extends Cell {
     }
 
     public evaluate(): void {
-        this.clear();
-        const varCell = evalTracing(this.body, this.env);
-        this.addChild(varCell);
-        this.variable.cell = varCell;
-        const writeCell = new WriteCell(this.variable, varCell);
-        this.addChild(writeCell);
+        this.varCell.evaluate();
+        this.variable.cell = this.varCell;
     }
 }
 
