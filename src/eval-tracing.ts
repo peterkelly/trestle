@@ -382,11 +382,13 @@ export class IfCell extends Cell {
     public readonly kind: "if" = "if";
     public readonly node: IfNode;
     private readonly env: Environment;
+    private readonly condValueCell: Cell;
 
     public constructor(node: IfNode, env: Environment) {
         super();
         this.node = node;
         this.env = env;
+        this.condValueCell = createTracing(this.node.condition, this.env);
     }
 
     public get name(): string {
@@ -395,21 +397,18 @@ export class IfCell extends Cell {
 
     public evaluate(): void {
         this.clear();
-        const condValueCell = evalTracing(this.node.condition, this.env);
-        this.addChild(condValueCell);
-        const condValue = condValueCell.value;
-        if (condValue.isTrue()) {
-            const branchCell = evalTracing(this.node.consequent, this.env);
-            this.addChild(branchCell);
-            const branchValue = branchCell.value;
-            this.value = branchValue;
-        }
-        else {
-            const branchCell = evalTracing(this.node.alternative, this.env);
-            this.addChild(branchCell);
-            const branchValue = branchCell.value;
-            this.value = branchValue;
-        }
+        this.condValueCell.evaluate();
+        this.addChild(this.condValueCell);
+        const condValue = this.condValueCell.value;
+        let branchCell: Cell;
+        if (condValue.isTrue())
+            branchCell = createTracing(this.node.consequent, this.env);
+        else
+            branchCell = createTracing(this.node.alternative, this.env);
+        branchCell.evaluate();
+        this.addChild(branchCell);
+        const branchValue = branchCell.value;
+        this.value = branchValue;
     }
 }
 
