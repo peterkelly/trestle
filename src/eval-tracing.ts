@@ -588,13 +588,14 @@ export class ApplyCell extends Cell {
 export class VariableCell extends Cell {
     public readonly _class_VariableCell: any;
     public readonly kind: "variable" = "variable";
-    public readonly node: VariableNode;
-    private readonly env: Environment;
+    private readonly variable: Variable;
+    private readonly readCell: ReadCell;
 
     public constructor(node: VariableNode, env: Environment) {
         super();
-        this.node = node;
-        this.env = env;
+        this.variable = env.resolveRef(node.ref, node.range);
+        this.readCell = new ReadCell(this.variable);
+        this.addChild(this.readCell);
     }
 
     public get name(): string {
@@ -602,13 +603,9 @@ export class VariableCell extends Cell {
     }
 
     public evaluate(): void {
-        this.clear();
-        const variable = this.env.resolveRef(this.node.ref, this.node.range);
-        const valueCell = variable.cell;
+        const valueCell = this.variable.cell;
         if (valueCell === undefined)
-            throw new Error("Variable " + variable.slot.name + " does not have a cell");
-        const readCell = new ReadCell(variable);
-        this.addChild(readCell);
+            throw new Error("Variable " + this.variable.slot.name + " does not have a cell");
         this.value = valueCell.value;
     }
 }
