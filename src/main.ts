@@ -317,7 +317,7 @@ function main(): void {
                     // console.log("");
                     Value.currentGeneration = 0;
                     createInput("test", new NumberValue(counter));
-                    const resultCell = evalTracing(built, topLevelEnv, bindings.clone());
+                    const resultCell = evalTracing(built, topLevelEnv);
                     // console.log("result = " + resultCell.value);
 
                     // Find user variables
@@ -345,7 +345,7 @@ function main(): void {
                     const dirty1Str = "Dirty 1\n" + treeToString(resultCell, bindings);
                     console.log(pageString(dirty1Str, options.height));
 
-                    resultCell.evaluate(topLevelEnv, bindings.clone());
+                    resultCell.evaluate(topLevelEnv);
                     const updated1Str = "Updated 1\n" + treeToString(resultCell, bindings);
                     console.log(pageString(updated1Str, options.height));
 
@@ -355,7 +355,7 @@ function main(): void {
                     const dirty2Str = "Dirty 2\n" + treeToString(resultCell, bindings);
                     console.log(pageString(dirty2Str, options.height));
 
-                    resultCell.evaluate(topLevelEnv, bindings.clone());
+                    resultCell.evaluate(topLevelEnv);
                     const updated2Str = "Updated 2\n" + treeToString(resultCell, bindings);
                     console.log(pageString(updated2Str, options.height));
 
