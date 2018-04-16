@@ -39,6 +39,7 @@ export interface CellPrinter {
 interface PrintOptions {
     abbrev?: boolean;
     width?: number;
+    generation?: number;
 }
 
 interface LiveBinding {
@@ -78,10 +79,18 @@ export function removeEscapeCodes(input: string): string {
             pos++;
             if (input[pos] === "[") {
                 pos++;
-                while ((input[pos] >= "0") && (input[pos] <= "9"))
-                    pos++;
-                if (input[pos] === "m")
-                    pos++;
+                while (true) {
+                    while ((input[pos] >= "0") && (input[pos] <= "9"))
+                        pos++;
+                    if (input[pos] === ";") {
+                        pos++;
+                        continue;
+                    }
+                    if (input[pos] === "m") {
+                        pos++;
+                    }
+                    break;
+                }
             }
         }
         else {
@@ -124,9 +133,19 @@ export function printCell(cell: Cell, writer: CellPrinter, prefix: string, inden
 
 
     let name = cell.name;
+    let id = "#" + cell.id;
+    // if ((options.generation !== undefined) && (cell.generation >= options.generation)) {
+    //     id = "\x1b[97;44;1m" + id + "\x1b[0m";
+    // }
+    if (cell.generation === 1) {
+        id = "\x1b[97;44m" + id + "\x1b[0m";
+    }
+    if (cell.generation === 2) {
+        id = "\x1b[97;41m" + id + "\x1b[0m";
+    }
     if (cell.isDirty)
         name = "\x1b[7m" + name + "\x1b[0m";
-    const line = prefix + "#" + cell.id + " " + name;
+    const line = prefix + id + " " + name;
     const varColumn = makeVarColumn(bindings);
 
     writer.println([line, varColumn]);
@@ -196,11 +215,14 @@ export abstract class Cell {
     public abstract name: string;
     public parent: Cell | null = null;
     public readonly id: number;
+    public readonly generation: number;
     private static nextId: number = 0;
+    public static currentGeneration: number = 0;
     public isDirty: boolean = false;
 
     public constructor(value?: Value) {
         this.id = Cell.nextId++;
+        this.generation = Cell.currentGeneration;
         if (this.parent !== null)
             this.parent.children.push(this);
         if (value !== undefined)
