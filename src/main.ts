@@ -22,7 +22,7 @@ import { Value, NumberValue, ErrorValue } from "./value";
 import { BuiltinProcedureValue, builtins, wrapBuiltinCPS } from "./builtins";
 import { simplify } from "./simplify";
 import { evalDirect, disableEvalDirect } from "./eval-direct";
-import { evalTracing, SimpleCell, BindingSet } from "./eval-tracing";
+import { evalTracing, SimpleCell, BindingSet, treeToString } from "./eval-tracing";
 import { evalCps } from "./eval-cps";
 import { createInput, updateInput, reevaluateDataflowGraph, createDataflowNode } from "./dataflow";
 
@@ -336,27 +336,27 @@ function main(): void {
                     // console.log("vars: " + userVars.map(v => v.slot.name).join(" "));
 
                     // Print execution tree
-                    // const executionTreeStr = resultCell.treeToString();
+                    // const executionTreeStr = treeToString(resultCell);
                     // console.log(executionTreeStr);
-                    const initialStr = "Initial evaluation\n" + resultCell.treeToString();
+                    const initialStr = "Initial evaluation\n" + treeToString(resultCell);
                     console.log(pageString(initialStr, options.height));
                     updateInput("test", new NumberValue(1));
 
-                    const dirty1Str = "Dirty 1\n" + resultCell.treeToString();
+                    const dirty1Str = "Dirty 1\n" + treeToString(resultCell);
                     console.log(pageString(dirty1Str, options.height));
 
                     resultCell.evaluate(topLevelEnv, bindings.clone());
-                    const updated1Str = "Updated 1\n" + resultCell.treeToString();
+                    const updated1Str = "Updated 1\n" + treeToString(resultCell);
                     console.log(pageString(updated1Str, options.height));
 
                     updateInput("test", new NumberValue(2));
 
 
-                    const dirty2Str = "Dirty 2\n" + resultCell.treeToString();
+                    const dirty2Str = "Dirty 2\n" + treeToString(resultCell);
                     console.log(pageString(dirty2Str, options.height));
 
                     resultCell.evaluate(topLevelEnv, bindings.clone());
-                    const updated2Str = "Updated 2\n" + resultCell.treeToString();
+                    const updated2Str = "Updated 2\n" + treeToString(resultCell);
                     console.log(pageString(updated2Str, options.height));
 
                     // const first = "First\n" + executionTreeStr;

@@ -92,6 +92,86 @@ export function removeEscapeCodes(input: string): string {
     return output;
 }
 
+export function writeCell(cell: Cell, writer: CellWriter, prefix: string, indent: string, options: WriteOptions): void {
+    // let line = prefix + this.name;
+    let children: Cell[];
+    if (options.abbrev) {
+        children = Cell.filterCellsForDisplay(cell.children);
+        while ((cell instanceof ApplyCell) && (children.length === 1)) {
+            cell = children[0];
+            children = Cell.filterCellsForDisplay(cell.children);
+        }
+    }
+    else {
+        children = cell.children;
+    }
+
+    let name = cell.name;
+    if (cell.isDirty)
+        name = "\x1b[7m" + name + "\x1b[0m";
+    const line = prefix + "#" + cell.id + " " + name;
+    const entries = Array.from(cell.liveBindings.bindings.entries()).sort(([a, ac], [b, bc]) => {
+        if (a.slot.name < b.slot.name)
+            return -1;
+        else if (a.slot.name > b.slot.name)
+            return 1;
+        else
+            return 0;
+    }).map(([key, value]) => value);
+    let varColumn = "";
+    for (const binding of entries)
+        varColumn += " " + binding.variable.slot.name + "=#" + binding.cell.id + "=" + binding.cell.value;
+
+    writer.println([line, varColumn]);
+    for (let i = 0; i < children.length; i++) {
+        let childPrefix: string;
+        let childIndent: string;
+        if (i + 1 < children.length) {
+            childPrefix = indent + "├── ";
+            childIndent = indent + "│   ";
+        }
+        else {
+            childPrefix = indent + "└── ";
+            childIndent = indent + "    ";
+        }
+        const child = children[i];
+        writeCell(child, writer, childPrefix, childIndent, options);
+    }
+}
+
+export function treeToString(root: Cell, options?: WriteOptions): string {
+    options = options || {};
+    const lineParts: string[][] = [];
+    let columns = 0;
+    const writer: CellWriter = {
+        println(msg: string[]): void {
+            lineParts.push(msg);
+            columns = Math.max(columns, msg.length);
+        }
+    };
+    writeCell(root, writer, "", "", options);
+    const widths: number[] = [];
+    for (let i = 0; i < columns; i++)
+        widths.push(0);
+    for (let lineno = 0; lineno < lineParts.length; lineno++) {
+        for (let col = 0; col < lineParts[lineno].length; col++)
+            widths[col] = Math.max(widths[col], removeEscapeCodes(lineParts[lineno][col]).length);
+    }
+    for (let lineno = 0; lineno < lineParts.length; lineno++) {
+        for (let col = 0; col < lineParts[lineno].length; col++) {
+            let str = lineParts[lineno][col];
+            let len = removeEscapeCodes(str).length;
+            while (len < widths[col]) {
+                str += " ";
+                len++;
+            }
+            lineParts[lineno][col] = str;
+        }
+    }
+    const actualLines = lineParts.map(cols => cols.join(" "));
+    return actualLines.join("\n");
+}
+
 export abstract class Cell {
     public readonly _class_Cell: any;
     public value: Value;
@@ -100,7 +180,7 @@ export abstract class Cell {
     public parent: Cell | null = null;
     public readonly id: number;
     private static nextId: number = 0;
-    private liveBindings: BindingSet;
+    public liveBindings: BindingSet;
     public isDirty: boolean = false;
 
     public constructor(bindings: BindingSet, value?: Value) {
@@ -126,56 +206,9 @@ export abstract class Cell {
         cell.parent = this;
     }
 
-    public write(writer: CellWriter, prefix: string, indent: string, options: WriteOptions): void {
-        Cell.writeCell(this, writer, prefix, indent, options);
-    }
-
-    public static writeCell(cell: Cell, writer: CellWriter, prefix: string, indent: string, options: WriteOptions): void {
-        // let line = prefix + this.name;
-        let children: Cell[];
-        if (options.abbrev) {
-            children = Cell.filterCellsForDisplay(cell.children);
-            while ((cell instanceof ApplyCell) && (children.length === 1)) {
-                cell = children[0];
-                children = Cell.filterCellsForDisplay(cell.children);
-            }
-        }
-        else {
-            children = cell.children;
-        }
-
-        let name = cell.name;
-        if (cell.isDirty)
-            name = "\x1b[7m" + name + "\x1b[0m";
-        const line = prefix + "#" + cell.id + " " + name;
-        const entries = Array.from(cell.liveBindings.bindings.entries()).sort(([a, ac], [b, bc]) => {
-            if (a.slot.name < b.slot.name)
-                return -1;
-            else if (a.slot.name > b.slot.name)
-                return 1;
-            else
-                return 0;
-        }).map(([key, value]) => value);
-        let varColumn = "";
-        for (const binding of entries)
-            varColumn += " " + binding.variable.slot.name + "=#" + binding.cell.id + "=" + binding.cell.value;
-
-        writer.println([line, varColumn]);
-        for (let i = 0; i < children.length; i++) {
-            let childPrefix: string;
-            let childIndent: string;
-            if (i + 1 < children.length) {
-                childPrefix = indent + "├── ";
-                childIndent = indent + "│   ";
-            }
-            else {
-                childPrefix = indent + "└── ";
-                childIndent = indent + "    ";
-            }
-            const child = children[i];
-            child.write(writer, childPrefix, childIndent, options);
-        }
-    }
+    // public write(writer: CellWriter, prefix: string, indent: string, options: WriteOptions): void {
+    //     writeCell(this, writer, prefix, indent, options);
+    // }
 
     public static filterCellsForDisplay(cells: Cell[]): Cell[] {
         const selected: Cell[] = [];
@@ -191,39 +224,6 @@ export abstract class Cell {
                 selected.push(cell);
         }
         return selected;
-    }
-
-    public treeToString(options?: WriteOptions): string {
-        options = options || {};
-        const lineParts: string[][] = [];
-        let columns = 0;
-        const writer: CellWriter = {
-            println(msg: string[]): void {
-                lineParts.push(msg);
-                columns = Math.max(columns, msg.length);
-            }
-        };
-        this.write(writer, "", "", options);
-        const widths: number[] = [];
-        for (let i = 0; i < columns; i++)
-            widths.push(0);
-        for (let lineno = 0; lineno < lineParts.length; lineno++) {
-            for (let col = 0; col < lineParts[lineno].length; col++)
-                widths[col] = Math.max(widths[col], removeEscapeCodes(lineParts[lineno][col]).length);
-        }
-        for (let lineno = 0; lineno < lineParts.length; lineno++) {
-            for (let col = 0; col < lineParts[lineno].length; col++) {
-                let str = lineParts[lineno][col];
-                let len = removeEscapeCodes(str).length;
-                while (len < widths[col]) {
-                    str += " ";
-                    len++;
-                }
-                lineParts[lineno][col] = str;
-            }
-        }
-        const actualLines = lineParts.map(cols => cols.join(" "));
-        return actualLines.join("\n");
     }
 
     public findVars(vars: Set<Variable>): void {
