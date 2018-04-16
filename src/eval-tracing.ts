@@ -284,8 +284,10 @@ export abstract class Cell {
     }
 
     public clear(): void {
-        for (const child of this.children)
+        for (const child of this.children) {
             child.release();
+            child.parent = null;
+        }
         this.children.length = 0;
     }
 }
@@ -642,6 +644,7 @@ export class LetrecBindingCell extends Cell {
     }
 
     public evaluate(): void {
+        this.clear();
         const varCell = evalTracing(this.body, this.env);
         this.addChild(varCell);
         this.variable.cell = varCell;
@@ -654,12 +657,21 @@ export class LetrecCell extends Cell {
     public readonly _class_LetrecCell: any;
     public readonly kind: "letrec" = "letrec";
     public readonly node: LetrecNode;
-    private readonly env: Environment;
+    private readonly innerEnv: Environment;
+    private readonly bindings: Cell[];
 
     public constructor(node: LetrecNode, env: Environment) {
         super();
         this.node = node;
-        this.env = env;
+
+        this.innerEnv = new Environment(this.node.innerScope, env);
+        this.bindings = [];
+        for (let i = 0; i < this.node.bindings.length; i++) {
+            const binding = this.node.bindings[i];
+            const variable = this.innerEnv.variables[i];
+            const bindingCell = new LetrecBindingCell(variable, binding.body, this.innerEnv);
+            this.bindings.push(bindingCell);
+        }
     }
 
     public get name(): string {
@@ -670,15 +682,12 @@ export class LetrecCell extends Cell {
         // FIXME: Need to create cells for each entry, and record the assignments that happen
         // when initialising the inner environment. Similarly for lambda.
         this.clear();
-        const innerEnv = new Environment(this.node.innerScope, this.env);
         for (let i = 0; i < this.node.bindings.length; i++) {
-            const binding = this.node.bindings[i];
-            const variable = innerEnv.variables[i];
-            const bindingCell = new LetrecBindingCell(variable, binding.body, innerEnv);
+            const bindingCell = this.bindings[i];
             this.addChild(bindingCell);
             bindingCell.evaluate();
         }
-        const bodyCell = evalTracing(this.node.body, innerEnv);
+        const bodyCell = evalTracing(this.node.body, this.innerEnv);
         this.addChild(bodyCell);
         const bodyValue = bodyCell.value;
         this.value = bodyValue;
