@@ -231,7 +231,7 @@ export abstract class Cell {
             this.value = UnspecifiedValue.instance;
     }
 
-    public abstract evaluate(env: Environment): void;
+    public abstract evaluate(): void;
 
     public addChild(cell: Cell): void {
         const index = this.children.indexOf(cell);
@@ -301,7 +301,7 @@ export class SimpleCell extends Cell {
         return "SimpleCell " + (<any> this.value).constructor.name;
     }
 
-    public evaluate(env: Environment): void {
+    public evaluate(): void {
         throw new Error("SimpleCell.evaluate() not implemented");
     }
 }
@@ -320,7 +320,7 @@ export class ConstantCell extends Cell {
         return this.kind;
     }
 
-    public evaluate(env: Environment): void {
+    public evaluate(): void {
         this.clear();
         this.value = this.node.value.toValue();
     }
@@ -330,21 +330,23 @@ export class AssignCell extends Cell {
     public readonly _class_AssignCell: any;
     public readonly kind: "assign" = "assign";
     public readonly node: AssignNode;
+    private readonly env: Environment;
 
-    public constructor(node: AssignNode) {
+    public constructor(node: AssignNode, env: Environment) {
         super();
         this.node = node;
+        this.env = env;
     }
 
     public get name(): string {
         return this.kind;
     }
 
-    public evaluate(env: Environment): void {
+    public evaluate(): void {
         this.clear();
-        const variable = env.resolveRef(this.node.ref, this.node.range);
+        const variable = this.env.resolveRef(this.node.ref, this.node.range);
 
-        const valueCell = evalTracing(this.node.body, env);
+        const valueCell = evalTracing(this.node.body, this.env);
         this.addChild(valueCell);
         variable.cell = valueCell;
         const writeCell = new WriteCell(variable, valueCell);
@@ -368,7 +370,7 @@ export class WriteCell extends Cell {
         return "write " + this.variable.slot.name;
     }
 
-    public evaluate(env: Environment): void {
+    public evaluate(): void {
         throw new Error("WriteCell.evaluate() not implemented");
     }
 }
@@ -377,29 +379,31 @@ export class IfCell extends Cell {
     public readonly _class_extends: any;
     public readonly kind: "if" = "if";
     public readonly node: IfNode;
+    private readonly env: Environment;
 
-    public constructor(node: IfNode) {
+    public constructor(node: IfNode, env: Environment) {
         super();
         this.node = node;
+        this.env = env;
     }
 
     public get name(): string {
         return this.kind;
     }
 
-    public evaluate(env: Environment): void {
+    public evaluate(): void {
         this.clear();
-        const condValueCell = evalTracing(this.node.condition, env);
+        const condValueCell = evalTracing(this.node.condition, this.env);
         this.addChild(condValueCell);
         const condValue = condValueCell.value;
         if (condValue.isTrue()) {
-            const branchCell = evalTracing(this.node.consequent, env);
+            const branchCell = evalTracing(this.node.consequent, this.env);
             this.addChild(branchCell);
             const branchValue = branchCell.value;
             this.value = branchValue;
         }
         else {
-            const branchCell = evalTracing(this.node.alternative, env);
+            const branchCell = evalTracing(this.node.alternative, this.env);
             this.addChild(branchCell);
             const branchValue = branchCell.value;
             this.value = branchValue;
@@ -411,19 +415,21 @@ export class LambdaCell extends Cell {
     public readonly _class_LambdaCell: any;
     public readonly kind: "lambda" = "lambda";
     public readonly node: LambdaNode;
+    private readonly env: Environment;
 
-    public constructor(node: LambdaNode) {
+    public constructor(node: LambdaNode, env: Environment) {
         super();
         this.node = node;
+        this.env = env;
     }
 
     public get name(): string {
         return this.kind;
     }
 
-    public evaluate(env: Environment): void {
+    public evaluate(): void {
         this.clear();
-        this.value = new LambdaProcedureValue(env, this.node);
+        this.value = new LambdaProcedureValue(this.env, this.node);
     }
 }
 
@@ -441,7 +447,7 @@ export class CallBindingCell extends Cell {
         return "call-binding " + this.variable.slot.name;
     }
 
-    public evaluate(env: Environment): void {
+    public evaluate(): void {
         throw new Error("CallBindingCell.evaluate() not implemented");
     }
 }
@@ -464,7 +470,7 @@ export class CallCell extends Cell {
         return this.kind;
     }
 
-    public evaluate(env: Environment): void {
+    public evaluate(): void {
         this.clear();
         const lambdaNode = this.procValue.proc;
 
@@ -476,7 +482,7 @@ export class CallCell extends Cell {
             throw new SchemeException(new ErrorValue(error));
         }
 
-        const innerEnv = new Environment(lambdaNode.innerScope, env);
+        const innerEnv = new Environment(lambdaNode.innerScope, this.procValue.env);
 
         for (let i = 0; i < lambdaNode.variables.length; i++) {
             const variable = innerEnv.variables[i];
@@ -500,21 +506,23 @@ export class SequenceCell extends Cell {
     public readonly _class_SequenceCell: any;
     public readonly kind: "sequence" = "sequence";
     public readonly node: SequenceNode;
+    private readonly env: Environment;
 
-    public constructor(node: SequenceNode) {
+    public constructor(node: SequenceNode, env: Environment) {
         super();
         this.node = node;
+        this.env = env;
     }
 
     public get name(): string {
         return this.kind;
     }
 
-    public evaluate(env: Environment): void {
+    public evaluate(): void {
         this.clear();
-        const ignoreCell = evalTracing(this.node.body, env);
+        const ignoreCell = evalTracing(this.node.body, this.env);
         this.addChild(ignoreCell);
-        const resultCell = evalTracing(this.node.next, env);
+        const resultCell = evalTracing(this.node.next, this.env);
         this.addChild(resultCell);
         const resultValue = resultCell.value;
         this.value = resultValue;
@@ -525,25 +533,27 @@ export class ApplyCell extends Cell {
     public readonly _class_ApplyCell: any;
     public readonly kind: "apply" = "apply";
     public readonly node: ApplyNode;
+    private readonly env: Environment;
 
-    public constructor(node: ApplyNode) {
+    public constructor(node: ApplyNode, env: Environment) {
         super();
         this.node = node;
+        this.env = env;
     }
 
     public get name(): string {
         return this.kind;
     }
 
-    public evaluate(env: Environment): void {
+    public evaluate(): void {
         this.clear();
-        const procCell = evalTracing(this.node.proc, env);
+        const procCell = evalTracing(this.node.proc, this.env);
         this.addChild(procCell);
         const procValue = procCell.value;
         const argCells: Cell[] = [];
         for (let i = 0; i < this.node.args.length; i++) {
             const arg = this.node.args[i];
-            const argCell = evalTracing(arg, env);
+            const argCell = evalTracing(arg, this.env);
             this.addChild(argCell);
             argCells.push(argCell);
         }
@@ -570,19 +580,21 @@ export class VariableCell extends Cell {
     public readonly _class_VariableCell: any;
     public readonly kind: "variable" = "variable";
     public readonly node: VariableNode;
+    private readonly env: Environment;
 
-    public constructor(node: VariableNode) {
+    public constructor(node: VariableNode, env: Environment) {
         super();
         this.node = node;
+        this.env = env;
     }
 
     public get name(): string {
         return this.kind;
     }
 
-    public evaluate(env: Environment): void {
+    public evaluate(): void {
         this.clear();
-        const variable = env.resolveRef(this.node.ref, this.node.range);
+        const variable = this.env.resolveRef(this.node.ref, this.node.range);
         const valueCell = variable.cell;
         if (valueCell === undefined)
             throw new Error("Variable " + variable.slot.name + " does not have a cell");
@@ -606,7 +618,7 @@ export class ReadCell extends Cell {
         return "read " + this.variable.slot.name;
     }
 
-    public evaluate(env: Environment): void {
+    public evaluate(): void {
         throw new Error("ReadCell.evaluate() not implemented");
     }
 }
@@ -616,19 +628,21 @@ export class LetrecBindingCell extends Cell {
     public readonly kind: "letrec-binding" = "letrec-binding";
     public readonly variable: Variable;
     public readonly body: ASTNode;
+    private readonly env: Environment;
 
-    public constructor(variable: Variable, body: ASTNode) {
+    public constructor(variable: Variable, body: ASTNode, env: Environment) {
         super();
         this.variable = variable;
         this.body = body;
+        this.env = env;
     }
 
     public get name(): string {
         return "letrec-binding " + this.variable.slot.name;
     }
 
-    public evaluate(env: Environment): void {
-        const varCell = evalTracing(this.body, env);
+    public evaluate(): void {
+        const varCell = evalTracing(this.body, this.env);
         this.addChild(varCell);
         this.variable.cell = varCell;
         const writeCell = new WriteCell(this.variable, varCell);
@@ -640,27 +654,29 @@ export class LetrecCell extends Cell {
     public readonly _class_LetrecCell: any;
     public readonly kind: "letrec" = "letrec";
     public readonly node: LetrecNode;
+    private readonly env: Environment;
 
-    public constructor(node: LetrecNode) {
+    public constructor(node: LetrecNode, env: Environment) {
         super();
         this.node = node;
+        this.env = env;
     }
 
     public get name(): string {
         return this.kind;
     }
 
-    public evaluate(env: Environment): void {
+    public evaluate(): void {
         // FIXME: Need to create cells for each entry, and record the assignments that happen
         // when initialising the inner environment. Similarly for lambda.
         this.clear();
-        const innerEnv = new Environment(this.node.innerScope, env);
+        const innerEnv = new Environment(this.node.innerScope, this.env);
         for (let i = 0; i < this.node.bindings.length; i++) {
             const binding = this.node.bindings[i];
             const variable = innerEnv.variables[i];
-            const bindingCell = new LetrecBindingCell(variable, binding.body);
+            const bindingCell = new LetrecBindingCell(variable, binding.body, innerEnv);
             this.addChild(bindingCell);
-            bindingCell.evaluate(innerEnv);
+            bindingCell.evaluate();
         }
         const bodyCell = evalTracing(this.node.body, innerEnv);
         this.addChild(bodyCell);
@@ -707,7 +723,7 @@ export class InputCell extends Cell {
             this.dfnode.addChangeListener(this.listener);
     }
 
-    public evaluate(env: Environment): void {
+    public evaluate(): void {
         const dfnode = getInput(this.node.name);
         this.setDataflowNode(dfnode);
         this.value = dfnode.value;
@@ -718,7 +734,7 @@ export function evalTracing(node: ASTNode, env: Environment): Cell {
     switch (node.kind) {
         case "constant": {
             const cell = new ConstantCell(node);
-            cell.evaluate(env);
+            cell.evaluate();
             return cell;
         }
         case "try": {
@@ -728,43 +744,43 @@ export function evalTracing(node: ASTNode, env: Environment): Cell {
             throw new Error("Exceptions are not supported in tracing evaluation mode");
         }
         case "assign": {
-            const cell = new AssignCell(node);
-            cell.evaluate(env);
+            const cell = new AssignCell(node, env);
+            cell.evaluate();
             return cell;
         }
         case "if": {
-            const cell = new IfCell(node);
-            cell.evaluate(env);
+            const cell = new IfCell(node, env);
+            cell.evaluate();
             return cell;
         }
         case "lambda": {
-            const cell = new LambdaCell(node);
-            cell.evaluate(env);
+            const cell = new LambdaCell(node, env);
+            cell.evaluate();
             return cell;
         }
         case "sequence": {
-            const cell = new SequenceCell(node);
-            cell.evaluate(env);
+            const cell = new SequenceCell(node, env);
+            cell.evaluate();
             return cell;
         }
         case "apply": {
-            const cell = new ApplyCell(node);
-            cell.evaluate(env);
+            const cell = new ApplyCell(node, env);
+            cell.evaluate();
             return cell;
         }
         case "variable": {
-            const cell = new VariableCell(node);
-            cell.evaluate(env);
+            const cell = new VariableCell(node, env);
+            cell.evaluate();
             return cell;
         }
         case "letrec": {
-            const cell = new LetrecCell(node);
-            cell.evaluate(env);
+            const cell = new LetrecCell(node, env);
+            cell.evaluate();
             return cell;
         }
         case "input": {
             const cell = new InputCell(node, node.name);
-            cell.evaluate(env);
+            cell.evaluate();
             return cell;
         }
     }
@@ -775,6 +791,6 @@ export function evalLambdaTracing(procValue: LambdaProcedureValue, argCells: Cel
     const cell = new CallCell(procValue, argCells, range);
     if (parent !== null)
         parent.addChild(cell);
-    cell.evaluate(cell.procValue.env);
+    cell.evaluate();
     return cell;
 }
