@@ -740,58 +740,35 @@ export class InputCell extends Cell {
 }
 
 export function evalTracing(node: ASTNode, env: Environment): Cell {
+    const cell = createTracing(node, env);
+    cell.evaluate();
+    return cell;
+}
+
+function createTracing(node: ASTNode, env: Environment): Cell {
     switch (node.kind) {
-        case "constant": {
-            const cell = new ConstantCell(node);
-            cell.evaluate();
-            return cell;
-        }
-        case "try": {
+        case "constant":
+            return new ConstantCell(node);
+        case "try":
             throw new Error("Exceptions are not supported in tracing evaluation mode");
-        }
-        case "throw": {
+        case "throw":
             throw new Error("Exceptions are not supported in tracing evaluation mode");
-        }
-        case "assign": {
-            const cell = new AssignCell(node, env);
-            cell.evaluate();
-            return cell;
-        }
-        case "if": {
-            const cell = new IfCell(node, env);
-            cell.evaluate();
-            return cell;
-        }
-        case "lambda": {
-            const cell = new LambdaCell(node, env);
-            cell.evaluate();
-            return cell;
-        }
-        case "sequence": {
-            const cell = new SequenceCell(node, env);
-            cell.evaluate();
-            return cell;
-        }
-        case "apply": {
-            const cell = new ApplyCell(node, env);
-            cell.evaluate();
-            return cell;
-        }
-        case "variable": {
-            const cell = new VariableCell(node, env);
-            cell.evaluate();
-            return cell;
-        }
-        case "letrec": {
-            const cell = new LetrecCell(node, env);
-            cell.evaluate();
-            return cell;
-        }
-        case "input": {
-            const cell = new InputCell(node, node.name);
-            cell.evaluate();
-            return cell;
-        }
+        case "assign":
+            return new AssignCell(node, env);
+        case "if":
+            return new IfCell(node, env);
+        case "lambda":
+            return new LambdaCell(node, env);
+        case "sequence":
+            return new SequenceCell(node, env);
+        case "apply":
+            return new ApplyCell(node, env);
+        case "variable":
+            return new VariableCell(node, env);
+        case "letrec":
+            return new LetrecCell(node, env);
+        case "input":
+            return new InputCell(node, node.name);
     }
 }
 
