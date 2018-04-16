@@ -509,11 +509,17 @@ export class SequenceCell extends Cell {
     public readonly kind: "sequence" = "sequence";
     public readonly node: SequenceNode;
     private readonly env: Environment;
+    private readonly ignoreCell: Cell;
+    private readonly resultCell: Cell;
 
     public constructor(node: SequenceNode, env: Environment) {
         super();
         this.node = node;
         this.env = env;
+        this.ignoreCell = createTracing(this.node.body, this.env);
+        this.resultCell = createTracing(this.node.next, this.env);
+        this.addChild(this.ignoreCell);
+        this.addChild(this.resultCell);
     }
 
     public get name(): string {
@@ -521,12 +527,9 @@ export class SequenceCell extends Cell {
     }
 
     public evaluate(): void {
-        this.clear();
-        const ignoreCell = evalTracing(this.node.body, this.env);
-        this.addChild(ignoreCell);
-        const resultCell = evalTracing(this.node.next, this.env);
-        this.addChild(resultCell);
-        const resultValue = resultCell.value;
+        this.ignoreCell.evaluate();
+        this.resultCell.evaluate();
+        const resultValue = this.resultCell.value;
         this.value = resultValue;
     }
 }
@@ -662,6 +665,7 @@ export class LetrecCell extends Cell {
     public readonly node: LetrecNode;
     private readonly innerEnv: Environment;
     private readonly bindings: Cell[];
+    private readonly bodyCell: Cell;
 
     public constructor(node: LetrecNode, env: Environment) {
         super();
@@ -675,6 +679,11 @@ export class LetrecCell extends Cell {
             const bindingCell = new LetrecBindingCell(variable, binding.body, this.innerEnv);
             this.bindings.push(bindingCell);
         }
+        this.bodyCell = createTracing(this.node.body, this.innerEnv);
+
+        for (const binding of this.bindings)
+            this.addChild(binding);
+        this.addChild(this.bodyCell);
     }
 
     public get name(): string {
@@ -682,18 +691,10 @@ export class LetrecCell extends Cell {
     }
 
     public evaluate(): void {
-        // FIXME: Need to create cells for each entry, and record the assignments that happen
-        // when initialising the inner environment. Similarly for lambda.
-        this.clear();
-        for (let i = 0; i < this.node.bindings.length; i++) {
-            const bindingCell = this.bindings[i];
-            this.addChild(bindingCell);
-            bindingCell.evaluate();
-        }
-        const bodyCell = evalTracing(this.node.body, this.innerEnv);
-        this.addChild(bodyCell);
-        const bodyValue = bodyCell.value;
-        this.value = bodyValue;
+        for (const binding of this.bindings)
+            binding.evaluate();
+        this.bodyCell.evaluate();
+        this.value = this.bodyCell.value;
     }
 }
 
