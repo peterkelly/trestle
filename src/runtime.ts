@@ -86,13 +86,6 @@ export class Environment {
             this.variables[i].value = values[i];
     }
 
-    public setVariableCells(cells: Cell[]): void {
-        if (cells.length !== this.variables.length)
-            throw new Error("Incorrect number of cells");
-        for (let i = 0; i < cells.length; i++)
-            this.variables[i].cell = cells[i];
-    }
-
     public setVariableDataflowNodes(nodes: DataflowNode[]): void {
         if (nodes.length !== this.variables.length)
             throw new Error("Incorrect number of variable nodes");

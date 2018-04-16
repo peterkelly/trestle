@@ -381,6 +381,25 @@ export class LambdaCell extends Cell {
     }
 }
 
+export class CallBindingCell extends Cell {
+    public readonly _class_CallBindingCell: any;
+    public readonly kind: "call-binding" = "call-binding";
+    public readonly variable: Variable;
+
+    public constructor(variable: Variable, bindings: BindingSet) {
+        super(bindings);
+        this.variable = variable;
+    }
+
+    public get name(): string {
+        return "call-binding " + this.variable.slot.name;
+    }
+
+    public evaluate(env: Environment, bindings: BindingSet): void {
+        throw new Error("CallBindingCell.evaluate() not implemented");
+    }
+}
+
 export class CallCell extends Cell {
     public readonly _class_CallCell: any;
     public readonly kind: "call" = "call";
@@ -414,7 +433,18 @@ export class CallCell extends Cell {
         }
 
         const innerEnv = new Environment(lambdaNode.innerScope, env);
-        innerEnv.setVariableCells(this.argCells);
+
+        for (let i = 0; i < lambdaNode.variables.length; i++) {
+            const variable = innerEnv.variables[i];
+            const cell = this.argCells[i];
+            variable.cell = cell;
+            const callBindingCell = new CallBindingCell(variable, bindings);
+            this.addChild(callBindingCell);
+
+            const writeCell = new WriteCell(bindings, variable, cell);
+            callBindingCell.addChild(writeCell);
+        }
+
         const bodyCell = evalTracing(this.procValue.proc.body, innerEnv, bindings);
         this.addChild(bodyCell);
         const bodyValue = bodyCell.value;
@@ -537,6 +567,31 @@ export class ReadCell extends Cell {
     }
 }
 
+export class LetrecBindingCell extends Cell {
+    public readonly _class_LetrecBindingCell: any;
+    public readonly kind: "letrec-binding" = "letrec-binding";
+    public readonly variable: Variable;
+    public readonly body: ASTNode;
+
+    public constructor(variable: Variable, body: ASTNode, bindings: BindingSet) {
+        super(bindings);
+        this.variable = variable;
+        this.body = body;
+    }
+
+    public get name(): string {
+        return "letrec-binding " + this.variable.slot.name;
+    }
+
+    public evaluate(env: Environment, bindings: BindingSet): void {
+        const varCell = evalTracing(this.body, env, bindings);
+        this.addChild(varCell);
+        this.variable.cell = varCell;
+        const writeCell = new WriteCell(bindings, this.variable, varCell);
+        this.addChild(writeCell);
+    }
+}
+
 export class LetrecCell extends Cell {
     public readonly _class_LetrecCell: any;
     public readonly kind: "letrec" = "letrec";
@@ -556,13 +611,13 @@ export class LetrecCell extends Cell {
         // when initialising the inner environment. Similarly for lambda.
         this.clear();
         const innerEnv = new Environment(this.node.innerScope, env);
-        const cellArray: Cell[] = [];
-        for (const binding of this.node.bindings) {
-            const varCell = evalTracing(binding.body, innerEnv, bindings);
-            this.addChild(varCell);
-            cellArray.push(varCell);
+        for (let i = 0; i < this.node.bindings.length; i++) {
+            const binding = this.node.bindings[i];
+            const variable = innerEnv.variables[i];
+            const bindingCell = new LetrecBindingCell(variable, binding.body, bindings);
+            this.addChild(bindingCell);
+            bindingCell.evaluate(innerEnv, bindings);
         }
-        innerEnv.setVariableCells(cellArray);
         const bodyCell = evalTracing(this.node.body, innerEnv, bindings);
         this.addChild(bodyCell);
         const bodyValue = bodyCell.value;
