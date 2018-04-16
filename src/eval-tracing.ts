@@ -32,11 +32,11 @@ import { Variable, Environment, SchemeException } from "./runtime";
 import { BuiltinProcedureValue } from "./builtins";
 import { getInput, InputDataflowNode, ValueChangeListener } from "./dataflow";
 
-export interface CellWriter {
+export interface CellPrinter {
     println(msg: string[]): void;
 }
 
-interface WriteOptions {
+interface PrintOptions {
     abbrev?: boolean;
     width?: number;
 }
@@ -107,8 +107,8 @@ export function makeVarColumn(bindings: BindingSet): string {
     return varColumn;
 }
 
-export function writeCell(cell: Cell, writer: CellWriter, prefix: string, indent: string,
-    bindings: BindingSet, options: WriteOptions): void {
+export function printCell(cell: Cell, writer: CellPrinter, prefix: string, indent: string,
+    bindings: BindingSet, options: PrintOptions): void {
 
     let children: Cell[];
     if (options.abbrev) {
@@ -151,22 +151,22 @@ export function writeCell(cell: Cell, writer: CellWriter, prefix: string, indent
             childIndent = indent + "    ";
         }
         const child = children[i];
-        writeCell(child, writer, childPrefix, childIndent, bindings, options);
+        printCell(child, writer, childPrefix, childIndent, bindings, options);
     }
 }
 
-export function treeToString(root: Cell, bindings: BindingSet, options?: WriteOptions): string {
+export function treeToString(root: Cell, bindings: BindingSet, options?: PrintOptions): string {
     bindings = bindings.clone();
     options = options || {};
     const lineParts: string[][] = [];
     let columns = 0;
-    const writer: CellWriter = {
+    const writer: CellPrinter = {
         println(msg: string[]): void {
             lineParts.push(msg);
             columns = Math.max(columns, msg.length);
         }
     };
-    writeCell(root, writer, "", "", bindings, options);
+    printCell(root, writer, "", "", bindings, options);
     const widths: number[] = [];
     for (let i = 0; i < columns; i++)
         widths.push(0);
