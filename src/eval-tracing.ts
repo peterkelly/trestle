@@ -538,11 +538,21 @@ export class ApplyCell extends Cell {
     public readonly kind: "apply" = "apply";
     public readonly node: ApplyNode;
     private readonly env: Environment;
+    private readonly procCell: Cell;
+    private readonly argCells: Cell[];
 
     public constructor(node: ApplyNode, env: Environment) {
         super();
         this.node = node;
         this.env = env;
+        this.procCell = createTracing(this.node.proc, this.env);
+
+        this.argCells = [];
+        for (let i = 0; i < this.node.args.length; i++) {
+            const arg = this.node.args[i];
+            const argCell = createTracing(arg, this.env);
+            this.argCells.push(argCell);
+        }
     }
 
     public get name(): string {
@@ -551,24 +561,21 @@ export class ApplyCell extends Cell {
 
     public evaluate(): void {
         this.clear();
-        const procCell = evalTracing(this.node.proc, this.env);
-        this.addChild(procCell);
-        const procValue = procCell.value;
-        const argCells: Cell[] = [];
+        this.procCell.evaluate();
+        this.addChild(this.procCell);
+        const procValue = this.procCell.value;
         for (let i = 0; i < this.node.args.length; i++) {
-            const arg = this.node.args[i];
-            const argCell = evalTracing(arg, this.env);
-            this.addChild(argCell);
-            argCells.push(argCell);
+            this.argCells[i].evaluate();
+            this.addChild(this.argCells[i]);
         }
 
         if (procValue instanceof BuiltinProcedureValue) {
-            const argValues = argCells.map(cell => cell.value);
+            const argValues = this.argCells.map(cell => cell.value);
             const resultValue = procValue.direct(argValues);
             this.value = resultValue;
         }
         else if (procValue instanceof LambdaProcedureValue) {
-            const resultCell = evalLambdaTracing(procValue, argCells, this.node.range, this);
+            const resultCell = evalLambdaTracing(procValue, this.argCells, this.node.range, this);
             const resultValue = resultCell.value;
             this.value = resultValue;
         }
