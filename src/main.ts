@@ -244,7 +244,7 @@ function main(): void {
                     variable.value = new BuiltinProcedureValue(name, wrapBuiltinCPS(fun));
                 else
                     variable.value = new BuiltinProcedureValue(name, fun);
-                variable.cell = new SimpleCell(bindings, variable.value);
+                variable.cell = new SimpleCell(variable.value);
                 variable.builtin = true;
             }
 

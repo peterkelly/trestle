@@ -122,13 +122,23 @@ export function writeCell(cell: Cell, writer: CellWriter, prefix: string, indent
         children = cell.children;
     }
 
+
     let name = cell.name;
     if (cell.isDirty)
         name = "\x1b[7m" + name + "\x1b[0m";
     const line = prefix + "#" + cell.id + " " + name;
-    const varColumn = makeVarColumn(cell.liveBindings);
+    const varColumn = makeVarColumn(bindings);
 
     writer.println([line, varColumn]);
+
+    if (cell instanceof WriteCell) {
+        bindings.bindings.set(cell.variable, {
+            variable: cell.variable,
+            cell: cell.cell,
+            writer: cell,
+        });
+    }
+
     for (let i = 0; i < children.length; i++) {
         let childPrefix: string;
         let childIndent: string;
@@ -146,6 +156,7 @@ export function writeCell(cell: Cell, writer: CellWriter, prefix: string, indent
 }
 
 export function treeToString(root: Cell, bindings: BindingSet, options?: WriteOptions): string {
+    bindings = bindings.clone();
     options = options || {};
     const lineParts: string[][] = [];
     let columns = 0;
@@ -186,11 +197,9 @@ export abstract class Cell {
     public parent: Cell | null = null;
     public readonly id: number;
     private static nextId: number = 0;
-    public liveBindings: BindingSet;
     public isDirty: boolean = false;
 
-    public constructor(bindings: BindingSet, value?: Value) {
-        this.liveBindings = bindings.clone();
+    public constructor(value?: Value) {
         this.id = Cell.nextId++;
         if (this.parent !== null)
             this.parent.children.push(this);
@@ -262,8 +271,8 @@ export abstract class Cell {
 export class SimpleCell extends Cell {
     public readonly _class_SimpleCell: any;
 
-    public constructor(bindings: BindingSet, value: Value) {
-        super(bindings, value);
+    public constructor(value: Value) {
+        super(value);
     }
 
     public get name(): string {
@@ -280,8 +289,8 @@ export class ConstantCell extends Cell {
     public readonly kind: "constant" = "constant";
     public readonly node: ConstantNode;
 
-    public constructor(node: ConstantNode, bindings: BindingSet) {
-        super(bindings);
+    public constructor(node: ConstantNode) {
+        super();
         this.node = node;
     }
 
@@ -300,8 +309,8 @@ export class AssignCell extends Cell {
     public readonly kind: "assign" = "assign";
     public readonly node: AssignNode;
 
-    public constructor(node: AssignNode, bindings: BindingSet) {
-        super(bindings);
+    public constructor(node: AssignNode) {
+        super();
         this.node = node;
     }
 
@@ -316,7 +325,7 @@ export class AssignCell extends Cell {
         const valueCell = evalTracing(this.node.body, env, bindings);
         this.addChild(valueCell);
         variable.cell = valueCell;
-        const writeCell = new WriteCell(bindings, variable, valueCell);
+        const writeCell = new WriteCell(variable, valueCell);
         this.addChild(writeCell);
     }
 }
@@ -327,15 +336,10 @@ export class WriteCell extends Cell {
     public readonly variable: Variable;
     public readonly cell: Cell;
 
-    public constructor(bindings: BindingSet, variable: Variable, cell: Cell) {
-        super(bindings);
+    public constructor(variable: Variable, cell: Cell) {
+        super();
         this.variable = variable;
         this.cell = cell;
-        bindings.bindings.set(this.variable, {
-            variable: this.variable,
-            cell: this.cell,
-            writer: this,
-        });
     }
 
     public get name(): string {
@@ -352,8 +356,8 @@ export class IfCell extends Cell {
     public readonly kind: "if" = "if";
     public readonly node: IfNode;
 
-    public constructor(node: IfNode, bindings: BindingSet) {
-        super(bindings);
+    public constructor(node: IfNode) {
+        super();
         this.node = node;
     }
 
@@ -386,8 +390,8 @@ export class LambdaCell extends Cell {
     public readonly kind: "lambda" = "lambda";
     public readonly node: LambdaNode;
 
-    public constructor(node: LambdaNode, bindings: BindingSet) {
-        super(bindings);
+    public constructor(node: LambdaNode) {
+        super();
         this.node = node;
     }
 
@@ -406,8 +410,8 @@ export class CallBindingCell extends Cell {
     public readonly kind: "call-binding" = "call-binding";
     public readonly variable: Variable;
 
-    public constructor(variable: Variable, bindings: BindingSet) {
-        super(bindings);
+    public constructor(variable: Variable) {
+        super();
         this.variable = variable;
     }
 
@@ -427,10 +431,8 @@ export class CallCell extends Cell {
     public readonly argCells: Cell[];
     public readonly range: SourceRange;
 
-    public constructor(procValue: LambdaProcedureValue, argCells: Cell[],
-        range: SourceRange,
-        bindings: BindingSet) {
-        super(bindings);
+    public constructor(procValue: LambdaProcedureValue, argCells: Cell[], range: SourceRange) {
+        super();
         this.procValue = procValue,
         this.argCells = argCells;
         this.range = range;
@@ -458,10 +460,10 @@ export class CallCell extends Cell {
             const variable = innerEnv.variables[i];
             const cell = this.argCells[i];
             variable.cell = cell;
-            const callBindingCell = new CallBindingCell(variable, bindings);
+            const callBindingCell = new CallBindingCell(variable);
             this.addChild(callBindingCell);
 
-            const writeCell = new WriteCell(bindings, variable, cell);
+            const writeCell = new WriteCell(variable, cell);
             callBindingCell.addChild(writeCell);
         }
 
@@ -477,8 +479,8 @@ export class SequenceCell extends Cell {
     public readonly kind: "sequence" = "sequence";
     public readonly node: SequenceNode;
 
-    public constructor(node: SequenceNode, bindings: BindingSet) {
-        super(bindings);
+    public constructor(node: SequenceNode) {
+        super();
         this.node = node;
     }
 
@@ -502,8 +504,8 @@ export class ApplyCell extends Cell {
     public readonly kind: "apply" = "apply";
     public readonly node: ApplyNode;
 
-    public constructor(node: ApplyNode, bindings: BindingSet) {
-        super(bindings);
+    public constructor(node: ApplyNode) {
+        super();
         this.node = node;
     }
 
@@ -547,8 +549,8 @@ export class VariableCell extends Cell {
     public readonly kind: "variable" = "variable";
     public readonly node: VariableNode;
 
-    public constructor(node: VariableNode, bindings: BindingSet) {
-        super(bindings);
+    public constructor(node: VariableNode) {
+        super();
         this.node = node;
     }
 
@@ -562,7 +564,7 @@ export class VariableCell extends Cell {
         const valueCell = variable.cell;
         if (valueCell === undefined)
             throw new Error("Variable " + variable.slot.name + " does not have a cell");
-        const readCell = new ReadCell(bindings, variable);
+        const readCell = new ReadCell(variable);
         this.addChild(readCell);
         this.value = valueCell.value;
     }
@@ -573,8 +575,8 @@ export class ReadCell extends Cell {
     public readonly kind: "read" = "read";
     public readonly variable: Variable;
 
-    public constructor(bindings: BindingSet, variable: Variable) {
-        super(bindings);
+    public constructor(variable: Variable) {
+        super();
         this.variable = variable;
     }
 
@@ -593,8 +595,8 @@ export class LetrecBindingCell extends Cell {
     public readonly variable: Variable;
     public readonly body: ASTNode;
 
-    public constructor(variable: Variable, body: ASTNode, bindings: BindingSet) {
-        super(bindings);
+    public constructor(variable: Variable, body: ASTNode) {
+        super();
         this.variable = variable;
         this.body = body;
     }
@@ -607,7 +609,7 @@ export class LetrecBindingCell extends Cell {
         const varCell = evalTracing(this.body, env, bindings);
         this.addChild(varCell);
         this.variable.cell = varCell;
-        const writeCell = new WriteCell(bindings, this.variable, varCell);
+        const writeCell = new WriteCell(this.variable, varCell);
         this.addChild(writeCell);
     }
 }
@@ -617,8 +619,8 @@ export class LetrecCell extends Cell {
     public readonly kind: "letrec" = "letrec";
     public readonly node: LetrecNode;
 
-    public constructor(node: LetrecNode, bindings: BindingSet) {
-        super(bindings);
+    public constructor(node: LetrecNode) {
+        super();
         this.node = node;
     }
 
@@ -634,7 +636,7 @@ export class LetrecCell extends Cell {
         for (let i = 0; i < this.node.bindings.length; i++) {
             const binding = this.node.bindings[i];
             const variable = innerEnv.variables[i];
-            const bindingCell = new LetrecBindingCell(variable, binding.body, bindings);
+            const bindingCell = new LetrecBindingCell(variable, binding.body);
             this.addChild(bindingCell);
             bindingCell.evaluate(innerEnv, bindings);
         }
@@ -653,8 +655,8 @@ export class InputCell extends Cell {
     public dfnode: InputDataflowNode | null = null;
     private listener: ValueChangeListener;
 
-    public constructor(node: InputNode, bindings: BindingSet, inputName: string) {
-        super(bindings);
+    public constructor(node: InputNode, inputName: string) {
+        super();
         this.node = node;
         this.inputName = inputName;
         // this.dfnode = dfnode;
@@ -693,7 +695,7 @@ export class InputCell extends Cell {
 export function evalTracing(node: ASTNode, env: Environment, bindings: BindingSet): Cell {
     switch (node.kind) {
         case "constant": {
-            const cell = new ConstantCell(node, bindings);
+            const cell = new ConstantCell(node);
             cell.evaluate(env, bindings);
             return cell;
         }
@@ -704,42 +706,42 @@ export function evalTracing(node: ASTNode, env: Environment, bindings: BindingSe
             throw new Error("Exceptions are not supported in tracing evaluation mode");
         }
         case "assign": {
-            const cell = new AssignCell(node, bindings);
+            const cell = new AssignCell(node);
             cell.evaluate(env, bindings);
             return cell;
         }
         case "if": {
-            const cell = new IfCell(node, bindings);
+            const cell = new IfCell(node);
             cell.evaluate(env, bindings);
             return cell;
         }
         case "lambda": {
-            const cell = new LambdaCell(node, bindings);
+            const cell = new LambdaCell(node);
             cell.evaluate(env, bindings);
             return cell;
         }
         case "sequence": {
-            const cell = new SequenceCell(node, bindings);
+            const cell = new SequenceCell(node);
             cell.evaluate(env, bindings);
             return cell;
         }
         case "apply": {
-            const cell = new ApplyCell(node, bindings);
+            const cell = new ApplyCell(node);
             cell.evaluate(env, bindings);
             return cell;
         }
         case "variable": {
-            const cell = new VariableCell(node, bindings);
+            const cell = new VariableCell(node);
             cell.evaluate(env, bindings);
             return cell;
         }
         case "letrec": {
-            const cell = new LetrecCell(node, bindings);
+            const cell = new LetrecCell(node);
             cell.evaluate(env, bindings);
             return cell;
         }
         case "input": {
-            const cell = new InputCell(node, bindings, node.name);
+            const cell = new InputCell(node, node.name);
             cell.evaluate(env, bindings);
             return cell;
         }
@@ -748,7 +750,7 @@ export function evalTracing(node: ASTNode, env: Environment, bindings: BindingSe
 
 export function evalLambdaTracing(procValue: LambdaProcedureValue, argCells: Cell[],
     range: SourceRange, parent: Cell, bindings: BindingSet): Cell {
-    const cell = new CallCell(procValue, argCells, range, bindings);
+    const cell = new CallCell(procValue, argCells, range);
     if (parent !== null)
         parent.addChild(cell);
     cell.evaluate(cell.procValue.env, bindings);
