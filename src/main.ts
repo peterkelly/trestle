@@ -27,8 +27,19 @@ import { evalTracing, Cell, SimpleCell, BindingSet, treeToString } from "./eval-
 import { evalCps } from "./eval-cps";
 import { createInput, updateInput, reevaluateDataflowGraph, createDataflowNode } from "./dataflow";
 
-function makeResultString(prefix: string, resultCell: Cell, bindings: BindingSet, generation?: number): string {
-    return prefix.padEnd(30) + resultCell.value + "\n" + treeToString(resultCell, bindings, { generation: generation });
+interface Frame {
+    title: string;
+    value: string;
+    content: string;
+}
+
+function makeResultString(prefix: string, resultCell: Cell, bindings: BindingSet, generation?: number): Frame {
+    // return prefix.padEnd(30) + resultCell.value + "\n" + treeToString(resultCell, bindings, { generation: generation });
+    return {
+        title: prefix,
+        value: "" + resultCell.value,
+        content: treeToString(resultCell, bindings, { generation: generation }),
+    };
 }
 
 function showBuildError(e: BuildError, filename: string, input: string): void {
@@ -355,14 +366,36 @@ function main(): void {
 
 main();
 
-function updateScreen(screen: blessed.Widgets.Screen, frame: string): void {
+function updateScreen(screen: blessed.Widgets.Screen, frame: Frame): void {
     while (screen.children.length > 0)
         screen.remove(screen.children[0]);
-    screen.append(blessed.text({ content: frame }));
+    const titleElement = blessed.text({
+        top: 0,
+        left: 0,
+        fg: "red",
+        content: frame.title,
+    });
+    const valueElement = blessed.text({
+        top: 0,
+        left: 50,
+        fg: "blue",
+        content: frame.value,
+    });
+    const contentElement = blessed.text({
+        top: 1,
+        left: 0,
+        // fg: "green",
+        content: frame.content,
+    });
+    screen.append(titleElement);
+    screen.append(valueElement);
+    screen.append(contentElement);
+
+    // screen.append(blessed.text({ content: frame }));
     screen.render();
 }
 
-function showFrames(frames: string[]): void {
+function showFrames(frames: Frame[]): void {
     if (frames.length === 0) {
         console.error("No frames to display");
         return;
