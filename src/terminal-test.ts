@@ -39,7 +39,7 @@ const line1 = blessed.text({
         fg: "black",
         bg: "white",
     }
-})
+});
 box.append(line1);
 
 screen.append(box);

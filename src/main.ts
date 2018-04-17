@@ -13,6 +13,7 @@
 // limitations under the License.
 
 import * as fs from "fs";
+import * as blessed from "blessed";
 import { Parser } from "./parse";
 import { SExpr, SymbolExpr, PairExpr, NilExpr, BuildError, buildSequenceFromList } from "./sexpr";
 import { SourceInput, testSourceCoords } from "./source";
@@ -28,21 +29,6 @@ import { createInput, updateInput, reevaluateDataflowGraph, createDataflowNode }
 
 function makeResultString(prefix: string, resultCell: Cell, bindings: BindingSet, generation?: number): string {
     return prefix.padEnd(30) + resultCell.value + "\n" + treeToString(resultCell, bindings, { generation: generation });
-}
-
-function pageString(input: string, height: number | null): string {
-    if (height === null)
-        return input;
-    const lines = input.split("\n");
-    if (lines.length > height) {
-        lines.length = height;
-        lines[height - 1] = "**** TRUNCATED ****";
-    }
-    else {
-        while (lines.length < height)
-            lines.push("");
-    }
-    return lines.join("\n");
 }
 
 function showBuildError(e: BuildError, filename: string, input: string): void {
@@ -307,22 +293,12 @@ function main(): void {
             }
             else if (options.evalKind === EvalKind.Tracing) {
                 try {
-                    // disableEvalDirect();
-                    // const counter = 0;
-                    // createInput("test", new NumberValue(counter));
-                    // const rootCell = evalTracing(built, topLevelEnv);
-                    // console.log("TRACING Success: " + rootCell.value);
-
-
-
                     disableEvalDirect();
                     let counter = 0; // tslint:disable-line:prefer-const
 
-                    // console.log("");
                     Value.currentGeneration = 0;
                     createInput("test", new NumberValue(counter));
                     const resultCell = evalTracing(built, topLevelEnv);
-                    // console.log("result = " + resultCell.value);
 
                     // Find user variables
                     const varSet = new Set<Variable>();
@@ -336,59 +312,31 @@ function main(): void {
                             return 0;
                     });
                     const userVars = allVars.filter(v => !v.builtin); // tslint:disable-line:no-unused-variable
-                    // console.log("all vars: " + allVars.map(v => v.slot.name).join(" "));
-                    // console.log("vars: " + userVars.map(v => v.slot.name).join(" "));
 
-                    // Print execution tree
-                    // const executionTreeStr = treeToString(resultCell);
-                    // console.log(executionTreeStr);
                     const initialStr = makeResultString("Initial evaluation", resultCell, bindings);
-                    console.log(pageString(initialStr, options.height));
                     Cell.currentGeneration = 1;
                     updateInput("test", new NumberValue(1));
 
                     const dirty1Str = makeResultString("Dirty 1", resultCell, bindings, 1);
-                    console.log(pageString(dirty1Str, options.height));
 
                     resultCell.evaluate();
                     const updated1Str = makeResultString("Updated 1", resultCell, bindings, 1);
-                    console.log(pageString(updated1Str, options.height));
 
                     Cell.currentGeneration = 2;
                     updateInput("test", new NumberValue(2));
 
-
                     const dirty2Str = makeResultString("Dirty 2", resultCell, bindings, 2);
-                    console.log(pageString(dirty2Str, options.height));
 
                     resultCell.evaluate();
                     const updated2Str = makeResultString("Updated 2", resultCell, bindings, 2);
-                    console.log(pageString(updated2Str, options.height));
 
-                    // const first = "First\n" + executionTreeStr;
-                    // const second = "Second\n" + executionTreeStr;
-                    // const third = "Third\n" + executionTreeStr;
-
-                    // console.log(pageString(first, options.height));
-                    // console.log(pageString(second, options.height));
-                    // console.log(pageString(third, options.height));
-
-
-                    // setInterval(() => {
-                    //     try {
-                    //         console.log("");
-                    //         counter++;
-                    //         Value.currentGeneration = counter;
-                    //         updateInput("test", new NumberValue(counter));
-                    //         // reevaluateDataflowGraph();
-                    //         resultCell.dump();
-                    //         console.log("" + resultCell.value.toStringWithOptions({ generation: Value.currentGeneration }));
-                    //     }
-                    //     catch (e) {
-                    //         console.error("" + e);
-                    //         console.error(e);
-                    //     }
-                    // }, 1000);
+                    showFrames([
+                        initialStr,
+                        dirty1Str,
+                        updated1Str,
+                        dirty2Str,
+                        updated2Str,
+                    ]);
                 }
                 catch (e) {
                     showError("TRACING Failure: ", e, filename, input);
@@ -406,3 +354,46 @@ function main(): void {
 }
 
 main();
+
+function updateScreen(screen: blessed.Widgets.Screen, frame: string): void {
+    while (screen.children.length > 0)
+        screen.remove(screen.children[0]);
+    screen.append(blessed.text({ content: frame }));
+    screen.render();
+}
+
+function showFrames(frames: string[]): void {
+    if (frames.length === 0) {
+        console.error("No frames to display");
+        return;
+    }
+
+    let frameno = 0;
+
+    const screen = blessed.screen({
+      smartCSR: true
+    });
+
+    updateScreen(screen, frames[0]);
+
+    // Quit on Escape, q, or Control-C.
+    screen.key(["escape", "q", "C-c"], (ch, key) => {
+        return process.exit(0);
+    });
+
+    screen.key(["["], (ch, key) => {
+        if (frameno <= 0)
+            return;
+        frameno--;
+        updateScreen(screen, frames[frameno]);
+        screen.render();
+    });
+
+    screen.key(["]"], (ch, key) => {
+        if (frameno >= frames.length - 1)
+            return;
+        frameno++;
+        updateScreen(screen, frames[frameno]);
+        screen.render();
+    });
+}
