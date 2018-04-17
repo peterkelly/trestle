@@ -26,6 +26,10 @@ import { evalTracing, Cell, SimpleCell, BindingSet, treeToString } from "./eval-
 import { evalCps } from "./eval-cps";
 import { createInput, updateInput, reevaluateDataflowGraph, createDataflowNode } from "./dataflow";
 
+function makeResultString(prefix: string, resultCell: Cell, bindings: BindingSet, generation?: number): string {
+    return prefix.padEnd(30) + resultCell.value + "\n" + treeToString(resultCell, bindings, { generation: generation });
+}
+
 function pageString(input: string, height: number | null): string {
     if (height === null)
         return input;
@@ -338,27 +342,27 @@ function main(): void {
                     // Print execution tree
                     // const executionTreeStr = treeToString(resultCell);
                     // console.log(executionTreeStr);
-                    const initialStr = "Initial evaluation\n" + treeToString(resultCell, bindings);
+                    const initialStr = makeResultString("Initial evaluation", resultCell, bindings);
                     console.log(pageString(initialStr, options.height));
                     Cell.currentGeneration = 1;
                     updateInput("test", new NumberValue(1));
 
-                    const dirty1Str = "Dirty 1\n" + treeToString(resultCell, bindings, { generation: 1 });
+                    const dirty1Str = makeResultString("Dirty 1", resultCell, bindings, 1);
                     console.log(pageString(dirty1Str, options.height));
 
                     resultCell.evaluate();
-                    const updated1Str = "Updated 1\n" + treeToString(resultCell, bindings, { generation: 1 });
+                    const updated1Str = makeResultString("Updated 1", resultCell, bindings, 1);
                     console.log(pageString(updated1Str, options.height));
 
                     Cell.currentGeneration = 2;
                     updateInput("test", new NumberValue(2));
 
 
-                    const dirty2Str = "Dirty 2\n" + treeToString(resultCell, bindings, { generation: 2 });
+                    const dirty2Str = makeResultString("Dirty 2", resultCell, bindings, 2);
                     console.log(pageString(dirty2Str, options.height));
 
                     resultCell.evaluate();
-                    const updated2Str = "Updated 2\n" + treeToString(resultCell, bindings, { generation: 2 });
+                    const updated2Str = makeResultString("Updated 2", resultCell, bindings, 2);
                     console.log(pageString(updated2Str, options.height));
 
                     // const first = "First\n" + executionTreeStr;
