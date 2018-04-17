@@ -333,11 +333,15 @@ export class AssignCell extends Cell {
     public readonly kind: "assign" = "assign";
     private readonly variable: Variable;
     private readonly valueCell: Cell;
+    private readonly writeCell: Cell;
 
     public constructor(node: AssignNode, env: Environment) {
         super();
         this.variable = env.resolveRef(node.ref, node.range);
         this.valueCell = createTracing(node.body, env);
+        this.writeCell = new WriteCell(this.variable, this.valueCell);
+        this.addChild(this.valueCell);
+        this.addChild(this.writeCell);
     }
 
     public get name(): string {
@@ -347,10 +351,6 @@ export class AssignCell extends Cell {
     public evaluate(): void {
         this.valueCell.evaluate();
         this.variable.cell = this.valueCell;
-        const writeCell = new WriteCell(this.variable, this.valueCell);
-        this.clear();
-        this.addChild(this.valueCell);
-        this.addChild(writeCell);
     }
 }
 
