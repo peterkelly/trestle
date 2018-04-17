@@ -358,7 +358,7 @@ export class WriteCell extends Cell {
     public readonly _class_AssignCell: any;
     public readonly kind: "write" = "write";
     public readonly variable: Variable;
-    public readonly cell: Cell;
+    public cell: Cell;
 
     public constructor(variable: Variable, cell: Cell) {
         super();
@@ -436,6 +436,7 @@ export class CallBindingCell extends Cell {
     public readonly _class_CallBindingCell: any;
     public readonly kind: "call-binding" = "call-binding";
     public readonly variable: Variable;
+    private writeCell: WriteCell | null = null;
 
     public constructor(variable: Variable) {
         super();
@@ -449,6 +450,16 @@ export class CallBindingCell extends Cell {
     public evaluate(): void {
         throw new Error("CallBindingCell.evaluate() not implemented");
     }
+
+    public recordWrite(cell: Cell): void {
+        if (this.writeCell === null) {
+            this.writeCell = new WriteCell(this.variable, cell);
+            this.addChild(this.writeCell);
+        }
+        else {
+            this.writeCell.cell = cell;
+        }
+    }
 }
 
 export class CallCell extends Cell {
@@ -457,12 +468,26 @@ export class CallCell extends Cell {
     public readonly procValue: LambdaProcedureValue;
     public readonly argCells: Cell[];
     public readonly range: SourceRange;
+    private readonly innerEnv: Environment;
+    private readonly callBindingCells: CallBindingCell[];
+    private readonly bodyCell: Cell;
 
     public constructor(procValue: LambdaProcedureValue, argCells: Cell[], range: SourceRange) {
         super();
         this.procValue = procValue,
         this.argCells = argCells;
         this.range = range;
+
+        const lambdaNode = this.procValue.proc;
+        this.innerEnv = new Environment(lambdaNode.innerScope, this.procValue.env);
+
+        this.callBindingCells = [];
+        for (let i = 0; i < lambdaNode.variables.length; i++) {
+            const variable = this.innerEnv.variables[i];
+            const callBindingCell = new CallBindingCell(variable);
+            this.callBindingCells.push(callBindingCell);
+        }
+        this.bodyCell = createTracing(this.procValue.proc.body, this.innerEnv);
     }
 
     public get name(): string {
@@ -481,22 +506,21 @@ export class CallCell extends Cell {
             throw new SchemeException(new ErrorValue(error));
         }
 
-        const innerEnv = new Environment(lambdaNode.innerScope, this.procValue.env);
-
         for (let i = 0; i < lambdaNode.variables.length; i++) {
-            const variable = innerEnv.variables[i];
+            const variable = this.innerEnv.variables[i];
             const cell = this.argCells[i];
             variable.cell = cell;
-            const callBindingCell = new CallBindingCell(variable);
+            const callBindingCell = this.callBindingCells[i];
             this.addChild(callBindingCell);
-
-            const writeCell = new WriteCell(variable, cell);
-            callBindingCell.addChild(writeCell);
+            // callBindingCell.clear();
+            // const writeCell = new WriteCell(variable, cell);
+            // callBindingCell.addChild(writeCell);
+            callBindingCell.recordWrite(cell);
         }
 
-        const bodyCell = evalTracing(this.procValue.proc.body, innerEnv);
-        this.addChild(bodyCell);
-        const bodyValue = bodyCell.value;
+        this.bodyCell.evaluate();
+        this.addChild(this.bodyCell);
+        const bodyValue = this.bodyCell.value;
         this.value = bodyValue;
     }
 }
