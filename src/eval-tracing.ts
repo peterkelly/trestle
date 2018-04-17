@@ -420,6 +420,7 @@ export class LambdaCell extends Cell {
         super();
         this.node = node;
         this.env = env;
+        this.value = new LambdaProcedureValue(this.env, this.node);
     }
 
     public get name(): string {
@@ -427,8 +428,7 @@ export class LambdaCell extends Cell {
     }
 
     public evaluate(): void {
-        this.clear();
-        this.value = new LambdaProcedureValue(this.env, this.node);
+        // Nothing to do here; we already set the value in the constructor
     }
 }
 
@@ -538,6 +538,8 @@ export class ApplyCell extends Cell {
     private readonly env: Environment;
     private readonly procCell: Cell;
     private readonly argCells: Cell[];
+    private oldProcValue: Value | null = null;
+    private oldCallCell: CallCell | null = null;
 
     public constructor(node: ApplyNode, env: Environment) {
         super();
@@ -567,14 +569,21 @@ export class ApplyCell extends Cell {
             this.addChild(this.argCells[i]);
         }
 
+        let callCell: CallCell | null;
         if (procValue instanceof BuiltinProcedureValue) {
             const argValues = this.argCells.map(cell => cell.value);
             const resultValue = procValue.direct(argValues);
             this.value = resultValue;
+            callCell = null;
         }
         else if (procValue instanceof LambdaProcedureValue) {
-            const resultCell = evalLambdaTracing(procValue, this.argCells, this.node.range, this);
-            const resultValue = resultCell.value;
+            if ((this.oldProcValue === procValue) && (this.oldCallCell !== null))
+                callCell = this.oldCallCell;
+            else
+                callCell = new CallCell(procValue, this.argCells, this.node.range);
+            this.addChild(callCell);
+            callCell.evaluate();
+            const resultValue = callCell.value;
             this.value = resultValue;
         }
         else {
@@ -582,6 +591,9 @@ export class ApplyCell extends Cell {
             const error = new BuildError(this.node.range, msg);
             throw new SchemeException(new ErrorValue(error));
         }
+
+        this.oldProcValue = procValue;
+        this.oldCallCell = callCell;
     }
 }
 
@@ -775,13 +787,4 @@ function createTracing(node: ASTNode, env: Environment): Cell {
         case "input":
             return new InputCell(node, node.name);
     }
-}
-
-export function evalLambdaTracing(procValue: LambdaProcedureValue, argCells: Cell[],
-    range: SourceRange, parent: Cell): Cell {
-    const cell = new CallCell(procValue, argCells, range);
-    if (parent !== null)
-        parent.addChild(cell);
-    cell.evaluate();
-    return cell;
 }
