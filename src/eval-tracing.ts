@@ -32,6 +32,24 @@ import { Variable, Environment, SchemeException } from "./runtime";
 import { BuiltinProcedureValue } from "./builtins";
 import { getInput, InputDataflowNode, ValueChangeListener } from "./dataflow";
 
+export interface EvaluationStep {
+    content: string;
+    cell: Cell;
+}
+
+let recordingRoot: Cell | null = null;
+let recordingBindings: BindingSet | null = null;
+let recordingSteps: EvaluationStep[] = [];
+
+function recordStep(current: Cell): void {
+    if ((recordingRoot === null) || (recordingBindings === null))
+        return;
+    recordingSteps.push({
+        content: treeToString(recordingRoot, recordingBindings, { currentCell: current }),
+        cell: current,
+    });
+}
+
 export interface CellPrinter {
     println(msg: string[]): void;
 }
@@ -40,6 +58,7 @@ interface PrintOptions {
     abbrev?: boolean;
     width?: number;
     generation?: number;
+    currentCell?: Cell;
 }
 
 interface LiveBinding {
@@ -146,7 +165,14 @@ export function printCell(cell: Cell, writer: CellPrinter, prefix: string, inden
     if (cell.isDirty)
         name = "\x1b[7m" + name + "\x1b[0m";
     const line = prefix + id + " " + name;
-    const varColumn = makeVarColumn(bindings);
+    let varColumn = makeVarColumn(bindings);
+
+    if ((options.currentCell !== null) && (options.currentCell === cell)) {
+        varColumn = "* " + varColumn;
+    }
+    else {
+        varColumn = "  " + varColumn;
+    }
 
     writer.println([line, varColumn]);
 
@@ -324,6 +350,7 @@ export class ConstantCell extends Cell {
 
     public evaluate(): void {
         this.clear();
+        recordStep(this);
         this.value = this.node.value.toValue();
     }
 }
@@ -349,7 +376,9 @@ export class AssignCell extends Cell {
     }
 
     public evaluate(): void {
+        recordStep(this);
         this.valueCell.evaluate();
+        recordStep(this.writeCell);
         this.variable.cell = this.valueCell;
     }
 }
@@ -387,6 +416,7 @@ export class IfCell extends Cell {
         this.node = node;
         this.env = env;
         this.condValueCell = createTracing(this.node.condition, this.env);
+        this.addChild(this.condValueCell);
     }
 
     public get name(): string {
@@ -395,16 +425,17 @@ export class IfCell extends Cell {
 
     public evaluate(): void {
         this.clear();
-        this.condValueCell.evaluate();
         this.addChild(this.condValueCell);
+        recordStep(this);
+        this.condValueCell.evaluate();
         const condValue = this.condValueCell.value;
         let branchCell: Cell;
         if (condValue.isTrue())
             branchCell = createTracing(this.node.consequent, this.env);
         else
             branchCell = createTracing(this.node.alternative, this.env);
-        branchCell.evaluate();
         this.addChild(branchCell);
+        branchCell.evaluate();
         const branchValue = branchCell.value;
         this.value = branchValue;
     }
@@ -454,9 +485,11 @@ export class CallBindingCell extends Cell {
     public recordWrite(cell: Cell): void {
         if (this.writeCell === null) {
             this.writeCell = new WriteCell(this.variable, cell);
+            recordStep(this.writeCell);
             this.addChild(this.writeCell);
         }
         else {
+            recordStep(this.writeCell);
             this.writeCell.cell = cell;
         }
     }
@@ -496,6 +529,7 @@ export class CallCell extends Cell {
 
     public evaluate(): void {
         this.clear();
+        recordStep(this);
         const lambdaNode = this.procValue.proc;
 
         const expectedArgCount = lambdaNode.variables.length;
@@ -518,8 +552,8 @@ export class CallCell extends Cell {
             callBindingCell.recordWrite(cell);
         }
 
-        this.bodyCell.evaluate();
         this.addChild(this.bodyCell);
+        this.bodyCell.evaluate();
         const bodyValue = this.bodyCell.value;
         this.value = bodyValue;
     }
@@ -548,6 +582,7 @@ export class SequenceCell extends Cell {
     }
 
     public evaluate(): void {
+        recordStep(this);
         this.ignoreCell.evaluate();
         this.resultCell.evaluate();
         const resultValue = this.resultCell.value;
@@ -585,13 +620,15 @@ export class ApplyCell extends Cell {
 
     public evaluate(): void {
         this.clear();
-        this.procCell.evaluate();
         this.addChild(this.procCell);
+        for (const argCell of this.argCells)
+            this.addChild(argCell);
+        recordStep(this);
+
+        this.procCell.evaluate();
         const procValue = this.procCell.value;
-        for (let i = 0; i < this.node.args.length; i++) {
+        for (let i = 0; i < this.node.args.length; i++)
             this.argCells[i].evaluate();
-            this.addChild(this.argCells[i]);
-        }
 
         let callCell: CallCell | null;
         if (procValue instanceof BuiltinProcedureValue) {
@@ -635,10 +672,12 @@ export class VariableCell extends Cell {
     }
 
     public get name(): string {
-        return this.kind;
+        return this.kind + " " + this.variable.slot.name;
     }
 
     public evaluate(): void {
+        recordStep(this);
+        recordStep(this.readCell);
         const valueCell = this.variable.cell;
         if (valueCell === undefined)
             throw new Error("Variable " + this.variable.slot.name + " does not have a cell");
@@ -691,7 +730,9 @@ export class LetrecBindingCell extends Cell {
     }
 
     public evaluate(): void {
+        recordStep(this);
         this.varCell.evaluate();
+        recordStep(this.writeCell);
         this.variable.cell = this.varCell;
     }
 }
@@ -728,6 +769,7 @@ export class LetrecCell extends Cell {
     }
 
     public evaluate(): void {
+        recordStep(this);
         for (const binding of this.bindings)
             binding.evaluate();
         this.bodyCell.evaluate();
@@ -774,19 +816,39 @@ export class InputCell extends Cell {
     }
 
     public evaluate(): void {
+        recordStep(this);
         const dfnode = getInput(this.node.name);
         this.setDataflowNode(dfnode);
         this.value = dfnode.value;
     }
 }
 
+export function recordTracing(root: Cell, f: () => void): EvaluationStep[] {
+    recordingRoot = root;
+    recordingBindings = new BindingSet();
+    recordingSteps = [];
+
+    root.evaluate();
+    const result = recordingSteps;
+
+    recordingRoot = null;
+    recordingBindings = null;
+    recordingSteps = [];
+
+    return result;
+}
+
 export function evalTracing(node: ASTNode, env: Environment): Cell {
     const cell = createTracing(node, env);
+
     cell.evaluate();
+    recordStep(cell);
+
+
     return cell;
 }
 
-function createTracing(node: ASTNode, env: Environment): Cell {
+export function createTracing(node: ASTNode, env: Environment): Cell {
     switch (node.kind) {
         case "constant":
             return new ConstantCell(node);

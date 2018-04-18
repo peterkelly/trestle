@@ -23,7 +23,15 @@ import { Value, NumberValue, ErrorValue } from "./value";
 import { BuiltinProcedureValue, builtins, wrapBuiltinCPS } from "./builtins";
 import { simplify } from "./simplify";
 import { evalDirect, disableEvalDirect } from "./eval-direct";
-import { evalTracing, Cell, SimpleCell, BindingSet, treeToString } from "./eval-tracing";
+import {
+    EvaluationStep,
+    createTracing,
+    recordTracing,
+    Cell,
+    SimpleCell,
+    BindingSet,
+    treeToString,
+} from "./eval-tracing";
 import { evalCps } from "./eval-cps";
 import { createInput, updateInput, reevaluateDataflowGraph, createDataflowNode } from "./dataflow";
 
@@ -309,7 +317,10 @@ function main(): void {
 
                     Value.currentGeneration = 0;
                     createInput("test", new NumberValue(counter));
-                    const resultCell = evalTracing(built, topLevelEnv);
+                    const resultCell = createTracing(built, topLevelEnv);
+                    const steps0 = recordTracing(resultCell, () => {
+                        resultCell.evaluate();
+                    });
 
                     // Find user variables
                     const varSet = new Set<Variable>();
@@ -330,7 +341,9 @@ function main(): void {
 
                     const dirty1Str = makeResultString("Dirty 1", resultCell, bindings, 1);
 
-                    resultCell.evaluate();
+                    const steps1 = recordTracing(resultCell, () => {
+                        resultCell.evaluate();
+                    });
                     const updated1Str = makeResultString("Updated 1", resultCell, bindings, 1);
 
                     Cell.currentGeneration = 2;
@@ -338,16 +351,38 @@ function main(): void {
 
                     const dirty2Str = makeResultString("Dirty 2", resultCell, bindings, 2);
 
-                    resultCell.evaluate();
+                    const steps2 = recordTracing(resultCell, () => {
+                        resultCell.evaluate();
+                    });
                     const updated2Str = makeResultString("Updated 2", resultCell, bindings, 2);
 
-                    showFrames([
-                        initialStr,
-                        dirty1Str,
-                        updated1Str,
-                        dirty2Str,
-                        updated2Str,
-                    ]);
+                    // showFrames([
+                    //     initialStr,
+                    //     dirty1Str,
+                    //     updated1Str,
+                    //     dirty2Str,
+                    //     updated2Str,
+                    // ]);
+                    void initialStr; // workaround tslint warnings
+                    void dirty1Str; // workaround tslint warnings
+                    void updated1Str; // workaround tslint warnings
+                    void dirty2Str; // workaround tslint warnings
+                    void updated2Str; // workaround tslint warnings
+
+                    const allFrames: Frame[] = [];
+                    const iterations: EvaluationStep[][] = [steps0, steps1, steps2];
+                    for (let iterationIndex = 0; iterationIndex <= 2; iterationIndex++) {
+                        const iteration = iterations[iterationIndex];
+                        for (let stepIndex = 0; stepIndex < iteration.length; stepIndex++) {
+                            const step = iteration[stepIndex];
+                            allFrames.push({
+                                title: "Iteration " + iterationIndex + ", step " + stepIndex,
+                                value: "#" + step.cell.id + " " + step.cell.name,
+                                content: step.content,
+                            });
+                        }
+                    }
+                    showFrames(allFrames);
                 }
                 catch (e) {
                     showError("TRACING Failure: ", e, filename, input);
