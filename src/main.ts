@@ -24,7 +24,7 @@ import { simplify } from "./simplify";
 import { evalDirect, disableEvalDirect } from "./eval-direct";
 import { evalCps } from "./eval-cps";
 import { createInput, updateInput, reevaluateDataflowGraph, createDataflowNode } from "./dataflow";
-import { evalTracing } from "./eval-tracing";
+import { createTrace } from "./eval-tracing";
 
 function showBuildError(e: BuildError, filename: string, input: string): void {
     const sinput = new SourceInput(input);
@@ -276,7 +276,9 @@ function main(): void {
                 try {
                     disableEvalDirect();
                     createInput("test", new NumberValue(0));
-                    const trace = evalTracing(built, topLevelEnv);
+                    const trace = createTrace(built, topLevelEnv);
+                    trace.evaluate();
+                    trace.evaluate();
                     const lines: string[] = [];
                     trace.print(lines, "", "");
                     console.log(lines.join("\n"));

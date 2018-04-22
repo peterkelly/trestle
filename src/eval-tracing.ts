@@ -35,7 +35,7 @@ export abstract class Trace {
     public readonly _class_Trace: any;
     public readonly id: number;
     public value: Value;
-    public children: Trace[] = [];
+    public readonly children: Trace[] = [];
     private static nextId: number = 0;
 
     public constructor() {
@@ -45,6 +45,10 @@ export abstract class Trace {
 
     public addChild(trace: Trace): void {
         this.children.push(trace);
+    }
+
+    public clear(): void {
+        this.children.length = 0;
     }
 
     public print(lines: string[], prefix: string, indent: string): void {
@@ -84,15 +88,13 @@ export class ConstantTrace extends Trace {
 export class AssignTrace extends Trace {
     public readonly _class_AssignTrace: any;
     public readonly kind: "assign" = "assign";
-    private readonly syntax: AssignSyntax;
-    private readonly env: Environment;
     private readonly variable: Variable;
+    private readonly valueTrace: Trace;
 
     public constructor(syntax: AssignSyntax, env: Environment) {
         super();
-        this.syntax = syntax;
-        this.env = env;
         this.variable = env.resolveRef(syntax.ref, syntax.range);
+        this.valueTrace = createTrace(syntax.body, env);
     }
 
     public get name(): string {
@@ -100,9 +102,10 @@ export class AssignTrace extends Trace {
     }
 
     public evaluate(): void {
-        const valueTrace = evalTracing(this.syntax.body, this.env);
-        this.addChild(valueTrace);
-        this.variable.value = valueTrace.value;
+        this.clear();
+        this.valueTrace.evaluate();
+        this.addChild(this.valueTrace);
+        this.variable.value = this.valueTrace.value;
         this.value = UnspecifiedValue.instance;
     }
 }
@@ -112,11 +115,16 @@ export class IfTrace extends Trace {
     public readonly kind: "if" = "if";
     private readonly syntax: IfSyntax;
     private readonly env: Environment;
+    private readonly condTrace: Trace;
+    private branchTrace: Trace | null = null;
+    private trueBranch: Trace | null = null;
+    private falseBranch: Trace | null = null;
 
     public constructor(syntax: IfSyntax, env: Environment) {
         super();
         this.syntax = syntax;
         this.env = env;
+        this.condTrace = createTrace(syntax.condition, env);
     }
 
     public get name(): string {
@@ -124,15 +132,26 @@ export class IfTrace extends Trace {
     }
 
     public evaluate(): void {
-        const condTrace = evalTracing(this.syntax.condition, this.env);
-        this.addChild(condTrace);
-        let branchTrace: Trace;
-        if (condTrace.value.isTrue())
-            branchTrace = evalTracing(this.syntax.consequent, this.env);
-        else
-            branchTrace = evalTracing(this.syntax.alternative, this.env);
-        this.addChild(branchTrace);
-        this.value = branchTrace.value;
+        this.clear();
+        this.addChild(this.condTrace);
+        this.condTrace.evaluate();
+
+        if (this.condTrace.value.isTrue()) {
+            if (this.trueBranch === null)
+                this.trueBranch = createTrace(this.syntax.consequent, this.env);
+            this.branchTrace = this.trueBranch;
+            this.falseBranch = null;
+        }
+        else {
+            if (this.falseBranch === null)
+                this.falseBranch = createTrace(this.syntax.alternative, this.env);
+            this.branchTrace = this.falseBranch;
+            this.trueBranch = null;
+        }
+
+        this.addChild(this.branchTrace);
+        this.branchTrace.evaluate();
+        this.value = this.branchTrace.value;
     }
 }
 
@@ -146,6 +165,7 @@ export class LambdaTrace extends Trace {
         super();
         this.syntax = syntax;
         this.env = env;
+        this.value = new LambdaProcedureValue(this.env, this.syntax);
     }
 
     public get name(): string {
@@ -153,20 +173,22 @@ export class LambdaTrace extends Trace {
     }
 
     public evaluate(): void {
-        this.value = new LambdaProcedureValue(this.env, this.syntax);
+        // Nothing to do here; we already set the value in the constructor
     }
 }
 
 export class SequenceTrace extends Trace {
     public readonly _class_SequenceTrace: any;
     public readonly kind: "sequence" = "sequence";
-    private readonly syntax: SequenceSyntax;
-    private readonly env: Environment;
+    private readonly bodyTrace: Trace;
+    private readonly nextTrace: Trace;
 
     public constructor(syntax: SequenceSyntax, env: Environment) {
         super();
-        this.syntax = syntax;
-        this.env = env;
+        this.bodyTrace = createTrace(syntax.body, env);
+        this.nextTrace = createTrace(syntax.next, env);
+        this.addChild(this.bodyTrace);
+        this.addChild(this.nextTrace);
     }
 
     public get name(): string {
@@ -174,11 +196,9 @@ export class SequenceTrace extends Trace {
     }
 
     public evaluate(): void {
-        const bodyTrace = evalTracing(this.syntax.body, this.env);
-        this.addChild(bodyTrace);
-        const nextTrace = evalTracing(this.syntax.next, this.env);
-        this.addChild(nextTrace);
-        this.value = nextTrace.value;
+        this.bodyTrace.evaluate();
+        this.nextTrace.evaluate();
+        this.value = this.nextTrace.value;
     }
 }
 
@@ -186,12 +206,21 @@ export class ApplyTrace extends Trace {
     public readonly _class_ApplyTrace: any;
     public readonly kind: "apply" = "apply";
     private readonly syntax: ApplySyntax;
-    private readonly env: Environment;
+    private readonly procTrace: Trace;
+    private readonly argTraces: Trace[];
+    private oldProcValue: Value | null = null;
+    private oldCallTrace: Trace | null = null;
 
     public constructor(syntax: ApplySyntax, env: Environment) {
         super();
         this.syntax = syntax;
-        this.env = env;
+        this.procTrace = createTrace(syntax.proc, env);
+        this.argTraces = [];
+        for (let i = 0; i < syntax.args.length; i++) {
+            const arg = syntax.args[i];
+            const argTrace = createTrace(arg, env);
+            this.argTraces.push(argTrace);
+        }
     }
 
     public get name(): string {
@@ -199,25 +228,29 @@ export class ApplyTrace extends Trace {
     }
 
     public evaluate(): void {
-        const procTrace = evalTracing(this.syntax.proc, this.env);
-        this.addChild(procTrace);
-        const procValue = procTrace.value;
-        const argTraces: Trace[] = [];
-        for (let i = 0; i < this.syntax.args.length; i++) {
-            const arg = this.syntax.args[i];
-            const argTrace = evalTracing(arg, this.env);
+        this.clear();
+        this.addChild(this.procTrace);
+        for (const argTrace of this.argTraces)
             this.addChild(argTrace);
-            argTraces.push(argTrace);
-        }
-        const argValues = argTraces.map(trace => trace.value);
 
+        this.procTrace.evaluate();
+        const procValue = this.procTrace.value;
+        for (const argTrace of this.argTraces)
+            argTrace.evaluate();
+        const argValues = this.argTraces.map(trace => trace.value);
+
+        let callTrace: Trace | null = null;
         if (procValue instanceof BuiltinProcedureValue) {
             this.value = procValue.direct(argValues);
         }
         else if (procValue instanceof LambdaProcedureValue) {
             const innerEnv = new Environment(procValue.proc.innerScope, procValue.env, argValues);
-            const callTrace = evalTracing(procValue.proc.body, innerEnv);
+            if ((this.oldProcValue === procValue) && (this.oldCallTrace !== null))
+                callTrace = this.oldCallTrace;
+            else
+                callTrace = createTrace(procValue.proc.body, innerEnv);
             this.addChild(callTrace);
+            callTrace.evaluate();
             this.value = callTrace.value;
         }
         else {
@@ -225,6 +258,9 @@ export class ApplyTrace extends Trace {
             const error = new BuildError(this.syntax.range, msg);
             throw new SchemeException(new ErrorValue(error));
         }
+
+        this.oldProcValue = procValue;
+        this.oldCallTrace = callTrace;
     }
 }
 
@@ -250,13 +286,24 @@ export class VariableTrace extends Trace {
 export class LetrecTrace extends Trace {
     public readonly _class_LetrecTrace: any;
     public readonly kind: "letrec" = "letrec";
-    private readonly syntax: LetrecSyntax;
-    private readonly env: Environment;
+    private readonly innerEnv: Environment;
+    private readonly bindings: Trace[];
+    private readonly body: Trace;
 
     public constructor(syntax: LetrecSyntax, env: Environment) {
         super();
-        this.syntax = syntax;
-        this.env = env;
+        this.innerEnv = new Environment(syntax.innerScope, env);
+        this.bindings = [];
+        for (let i = 0; i < syntax.bindings.length; i++) {
+            const binding = syntax.bindings[i];
+            const bindingTrace = createTrace(binding.body, this.innerEnv);
+            this.bindings.push(bindingTrace);
+        }
+        this.body = createTrace(syntax.body, this.innerEnv);
+
+        for (const binding of this.bindings)
+            this.addChild(binding);
+        this.addChild(this.body);
     }
 
     public get name(): string {
@@ -264,18 +311,12 @@ export class LetrecTrace extends Trace {
     }
 
     public evaluate(): void {
-        const innerEnv = new Environment(this.syntax.innerScope, this.env);
-        const bindingTraceArray: Trace[] = [];
-        for (const binding of this.syntax.bindings) {
-            const bindingTrace = evalTracing(binding.body, innerEnv);
-            this.addChild(bindingTrace);
-            bindingTraceArray.push(bindingTrace);
-        }
-        const bindingArray = bindingTraceArray.map(trace => trace.value);
-        innerEnv.setVariableValues(bindingArray);
-        const bodyTrace = evalTracing(this.syntax.body, innerEnv);
-        this.addChild(bodyTrace);
-        this.value = bodyTrace.value;
+        for (const binding of this.bindings)
+            binding.evaluate();
+        const bindingArray = this.bindings.map(trace => trace.value);
+        this.innerEnv.setVariableValues(bindingArray);
+        this.body.evaluate();
+        this.value = this.body.value;
     }
 }
 
@@ -290,7 +331,7 @@ export class InputTrace extends Trace {
     }
 
     public get name(): string {
-        return "input";
+        return "input[" + JSON.stringify(this.syntax.name) + "]";
     }
 
     public evaluate(): void {
@@ -300,56 +341,29 @@ export class InputTrace extends Trace {
 }
 
 
-export function evalTracing(syntax: Syntax, env: Environment): Trace {
+export function createTrace(syntax: Syntax, env: Environment): Trace {
     switch (syntax.kind) {
-        case "constant": {
-            const result = new ConstantTrace(syntax);
-            result.evaluate();
-            return result;
-        }
+        case "constant":
+            return new ConstantTrace(syntax);
         case "try":
             throw new Error("Exceptions are not supported in tracing evaluation mode");
         case "throw":
             throw new Error("Exceptions are not supported in tracing evaluation mode");
-        case "assign": {
-            const result = new AssignTrace(syntax, env);
-            result.evaluate();
-            return result;
-        }
-        case "if": {
-            const result = new IfTrace(syntax, env);
-            result.evaluate();
-            return result;
-        }
-        case "lambda": {
-            const result = new LambdaTrace(syntax, env);
-            result.evaluate();
-            return result;
-        }
-        case "sequence": {
-            const result = new SequenceTrace(syntax, env);
-            result.evaluate();
-            return result;
-        }
-        case "apply": {
-            const result = new ApplyTrace(syntax, env);
-            result.evaluate();
-            return result;
-        }
-        case "variable": {
-            const result = new VariableTrace(syntax, env);
-            result.evaluate();
-            return result;
-        }
-        case "letrec": {
-            const result = new LetrecTrace(syntax, env);
-            result.evaluate();
-            return result;
-        }
-        case "input": {
-            const result = new InputTrace(syntax);
-            result.evaluate();
-            return result;
-        }
+        case "assign":
+            return new AssignTrace(syntax, env);
+        case "if":
+            return new IfTrace(syntax, env);
+        case "lambda":
+            return new LambdaTrace(syntax, env);
+        case "sequence":
+            return new SequenceTrace(syntax, env);
+        case "apply":
+            return new ApplyTrace(syntax, env);
+        case "variable":
+            return new VariableTrace(syntax, env);
+        case "letrec":
+            return new LetrecTrace(syntax, env);
+        case "input":
+            return new InputTrace(syntax);
     }
 }
