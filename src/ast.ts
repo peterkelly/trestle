@@ -18,21 +18,21 @@ import { LexicalRef, LexicalScope } from "./scope";
 import { Value } from "./value";
 import { Environment } from "./runtime";
 
-export type ASTNode =
-    ConstantNode |
-    TryNode |
-    ThrowNode |
-    AssignNode |
-    IfNode |
-    LambdaNode |
-    SequenceNode |
-    ApplyNode |
-    VariableNode |
-    LetrecNode |
-    InputNode;
+export type Syntax =
+    ConstantSyntax |
+    TrySyntax |
+    ThrowSyntax |
+    AssignSyntax |
+    IfSyntax |
+    LambdaSyntax |
+    SequenceSyntax |
+    ApplySyntax |
+    VariableSyntax |
+    LetrecSyntax |
+    InputSyntax;
 
-export abstract class ASTBaseNode {
-    public readonly _class_ASTBaseNode: any;
+export abstract class SyntaxBase {
+    public readonly _class_SyntaxBase: any;
     public readonly range: SourceRange;
 
     public constructor(range: SourceRange) {
@@ -42,8 +42,8 @@ export abstract class ASTBaseNode {
     public abstract dump(indent: string): void;
 }
 
-export class ConstantNode extends ASTBaseNode {
-    public readonly _class_ConstantNode: any;
+export class ConstantSyntax extends SyntaxBase {
+    public readonly _class_ConstantSyntax: any;
     public readonly kind: "constant" = "constant";
     public readonly value: SExpr;
 
@@ -58,13 +58,13 @@ export class ConstantNode extends ASTBaseNode {
     }
 }
 
-export class TryNode extends ASTBaseNode {
-    public readonly  _class_TryNode: any;
+export class TrySyntax extends SyntaxBase {
+    public readonly  _class_TrySyntax: any;
     public readonly kind: "try" = "try";
-    public readonly tryBody: ASTNode;
-    public readonly catchBody: LambdaNode;
+    public readonly tryBody: Syntax;
+    public readonly catchBody: LambdaSyntax;
 
-    public constructor(range: SourceRange, tryBody: ASTNode, catchBody: LambdaNode) {
+    public constructor(range: SourceRange, tryBody: Syntax, catchBody: LambdaSyntax) {
         super(range);
         this.tryBody = tryBody;
         this.catchBody = catchBody;
@@ -79,12 +79,12 @@ export class TryNode extends ASTBaseNode {
     }
 }
 
-export class ThrowNode extends ASTBaseNode {
-    public readonly _class_ThrowNode: any;
+export class ThrowSyntax extends SyntaxBase {
+    public readonly _class_ThrowSyntax: any;
     public readonly kind: "throw" = "throw";
-    public readonly body: ASTNode;
+    public readonly body: Syntax;
 
-    public constructor(range: SourceRange, body: ASTNode) {
+    public constructor(range: SourceRange, body: Syntax) {
         super(range);
         this.body = body;
     }
@@ -95,13 +95,13 @@ export class ThrowNode extends ASTBaseNode {
     }
 }
 
-export class AssignNode extends ASTBaseNode {
-    public readonly _class_AssignNode: any;
+export class AssignSyntax extends SyntaxBase {
+    public readonly _class_AssignSyntax: any;
     public readonly kind: "assign" = "assign";
     public readonly ref: LexicalRef;
-    public readonly body: ASTNode;
+    public readonly body: Syntax;
 
-    public constructor(range: SourceRange, ref: LexicalRef, body: ASTNode) {
+    public constructor(range: SourceRange, ref: LexicalRef, body: Syntax) {
         super(range);
         this.ref = ref;
         this.body = body;
@@ -113,15 +113,15 @@ export class AssignNode extends ASTBaseNode {
     }
 }
 
-export class IfNode extends ASTBaseNode {
-    public readonly _class_IfNode: any;
+export class IfSyntax extends SyntaxBase {
+    public readonly _class_IfSyntax: any;
     public readonly kind: "if" = "if";
 
     public constructor(
         range: SourceRange,
-        public condition: ASTNode,
-        public consequent: ASTNode,
-        public alternative: ASTNode
+        public condition: Syntax,
+        public consequent: Syntax,
+        public alternative: Syntax
     ) {
         super(range);
     }
@@ -138,9 +138,9 @@ export class IfNode extends ASTBaseNode {
 export class LambdaProcedureValue extends Value {
     public _class_LambdaProcedureValue: any;
     public readonly env: Environment;
-    public readonly proc: LambdaNode;
+    public readonly proc: LambdaSyntax;
 
-    public constructor(env: Environment, proc: LambdaNode) {
+    public constructor(env: Environment, proc: LambdaSyntax) {
         super();
         this.env = env;
         this.proc = proc;
@@ -151,14 +151,14 @@ export class LambdaProcedureValue extends Value {
     }
 }
 
-export class LambdaNode extends ASTBaseNode {
-    public readonly _class_LambdaNode: any;
+export class LambdaSyntax extends SyntaxBase {
+    public readonly _class_LambdaSyntax: any;
     public readonly kind: "lambda" = "lambda";
     public readonly variables: string[];
     public readonly innerScope: LexicalScope;
-    public readonly body: ASTNode;
+    public readonly body: Syntax;
 
-    public constructor(range: SourceRange, variables: string[], innerScope: LexicalScope, body: ASTNode) {
+    public constructor(range: SourceRange, variables: string[], innerScope: LexicalScope, body: Syntax) {
         super(range);
         this.variables = variables;
         this.innerScope = innerScope;
@@ -171,13 +171,13 @@ export class LambdaNode extends ASTBaseNode {
     }
 }
 
-export class SequenceNode extends ASTBaseNode {
-    public readonly _class_SequenceNode: any;
+export class SequenceSyntax extends SyntaxBase {
+    public readonly _class_SequenceSyntax: any;
     public readonly kind: "sequence" = "sequence";
-    public readonly body: ASTNode;
-    public readonly next: ASTNode;
+    public readonly body: Syntax;
+    public readonly next: Syntax;
 
-    public constructor(range: SourceRange, body: ASTNode, next: ASTNode) {
+    public constructor(range: SourceRange, body: Syntax, next: Syntax) {
         super(range);
         this.body = body;
         this.next = next;
@@ -185,8 +185,8 @@ export class SequenceNode extends ASTBaseNode {
 
     public dump(indent: string): void {
         console.log(indent + "Sequence");
-        let cur: ASTNode = this;
-        while (cur instanceof SequenceNode) {
+        let cur: Syntax = this;
+        while (cur instanceof SequenceSyntax) {
             cur.body.dump(indent + "    ");
             cur = cur.next;
         }
@@ -194,13 +194,13 @@ export class SequenceNode extends ASTBaseNode {
     }
 }
 
-export class ApplyNode extends ASTBaseNode {
-    public readonly _class_ApplyNode: any;
+export class ApplySyntax extends SyntaxBase {
+    public readonly _class_ApplySyntax: any;
     public readonly kind: "apply" = "apply";
-    public readonly proc: ASTNode;
-    public readonly args: ASTNode[];
+    public readonly proc: Syntax;
+    public readonly args: Syntax[];
 
-    public constructor(range: SourceRange, proc: ASTNode, args: ASTNode[]) {
+    public constructor(range: SourceRange, proc: Syntax, args: Syntax[]) {
         super(range);
         this.proc = proc;
         this.args = args;
@@ -216,8 +216,8 @@ export class ApplyNode extends ASTBaseNode {
     }
 }
 
-export class VariableNode extends ASTBaseNode {
-    public readonly _class_VariableNode: any;
+export class VariableSyntax extends SyntaxBase {
+    public readonly _class_VariableSyntax: any;
     public readonly kind: "variable" = "variable";
     public readonly ref: LexicalRef;
 
@@ -233,17 +233,17 @@ export class VariableNode extends ASTBaseNode {
 
 export interface LetrecBinding {
     ref: LexicalRef;
-    body: ASTNode;
+    body: Syntax;
 }
 
-export class LetrecNode extends ASTBaseNode {
-    public readonly _class_LetrecNode: any;
+export class LetrecSyntax extends SyntaxBase {
+    public readonly _class_LetrecSyntax: any;
     public readonly kind: "letrec" = "letrec";
     public readonly innerScope: LexicalScope;
     public readonly bindings: LetrecBinding[];
-    public readonly body: ASTNode;
+    public readonly body: Syntax;
 
-    public constructor(range: SourceRange, innerScope: LexicalScope, bindings: LetrecBinding[], body: ASTNode) {
+    public constructor(range: SourceRange, innerScope: LexicalScope, bindings: LetrecBinding[], body: Syntax) {
         super(range);
         this.innerScope = innerScope;
         this.bindings = bindings;
@@ -261,8 +261,8 @@ export class LetrecNode extends ASTBaseNode {
     }
 }
 
-export class InputNode extends ASTBaseNode {
-    public readonly _class_InputNode: any;
+export class InputSyntax extends SyntaxBase {
+    public readonly _class_InputSyntax: any;
     public readonly kind: "input" = "input";
 
     public constructor(range: SourceRange, public name: string) {

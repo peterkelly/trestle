@@ -13,20 +13,19 @@
 // limitations under the License.
 
 import {
-    ASTNode,
-    ConstantNode,
-    VariableNode,
-    IfNode,
-    // DefineNode,
-    LambdaNode,
-    ApplyNode,
-    AssignNode,
-    SequenceNode,
+    Syntax,
+    ConstantSyntax,
+    VariableSyntax,
+    IfSyntax,
+    LambdaSyntax,
+    ApplySyntax,
+    AssignSyntax,
+    SequenceSyntax,
     LetrecBinding,
-    LetrecNode,
-    TryNode,
-    ThrowNode,
-    InputNode,
+    LetrecSyntax,
+    TrySyntax,
+    ThrowSyntax,
+    InputSyntax,
 } from "./ast";
 import {
     SourceRange,
@@ -89,7 +88,7 @@ export abstract class SExpr {
 
     public abstract cpsTransform(succ: SExpr): SExpr;
 
-    public abstract build(scope: LexicalScope): ASTNode;
+    public abstract build(scope: LexicalScope): Syntax;
 
     public pair(car: SExpr, cdr: SExpr): PairExpr {
         return new PairExpr(this.range, car, cdr);
@@ -139,8 +138,8 @@ export class BooleanExpr extends LeafExpr {
             output.push("#f");
     }
 
-    public build(scope: LexicalScope): ASTNode {
-        return new ConstantNode(this.range, this);
+    public build(scope: LexicalScope): Syntax {
+        return new ConstantSyntax(this.range, this);
     }
 }
 
@@ -173,8 +172,8 @@ export class NumberExpr extends LeafExpr {
         output.push("" + this.value);
     }
 
-    public build(scope: LexicalScope): ASTNode {
-        return new ConstantNode(this.range, this);
+    public build(scope: LexicalScope): Syntax {
+        return new ConstantSyntax(this.range, this);
     }
 }
 
@@ -207,8 +206,8 @@ export class StringExpr extends LeafExpr {
         output.push(JSON.stringify(this.value));
     }
 
-    public build(scope: LexicalScope): ASTNode {
-        return new ConstantNode(this.range, this);
+    public build(scope: LexicalScope): Syntax {
+        return new ConstantSyntax(this.range, this);
     }
 }
 
@@ -241,11 +240,11 @@ export class SymbolExpr extends LeafExpr {
         output.push(this.name);
     }
 
-    public build(scope: LexicalScope): ASTNode {
+    public build(scope: LexicalScope): Syntax {
         const ref = scope.lookup(this.name);
         if (ref === null)
             throw new BuildError(this.range, "symbol not found: " + this.name);
-        return new VariableNode(this.range, ref);
+        return new VariableSyntax(this.range, ref);
     }
 }
 
@@ -290,8 +289,8 @@ export class QuoteExpr extends LeafExpr {
         output.push(")");
     }
 
-    public build(scope: LexicalScope): ASTNode {
-        return new ConstantNode(this.range, this.body);
+    public build(scope: LexicalScope): Syntax {
+        return new ConstantSyntax(this.range, this.body);
     }
 }
 
@@ -450,17 +449,17 @@ export class PairExpr extends SExpr {
         }
     }
 
-    public build(scope: LexicalScope): ASTNode {
+    public build(scope: LexicalScope): Syntax {
         const form = parseSpecialForm(this);
         switch (form.kind) {
             case "if": {
                 const condition = form.condition.build(scope);
                 const consequent = form.consequent.build(scope);
                 const alternative = form.alternative.build(scope);
-                return new IfNode(this.range, condition, consequent, alternative);
+                return new IfSyntax(this.range, condition, consequent, alternative);
             }
             case "quote":
-                return new ConstantNode(this.range, form.body);
+                return new ConstantSyntax(this.range, form.body);
             case "lambda": {
                 const names = getFormalParameterNames(form.params);
                 return buildLambda(this.range, scope, names, form.bodyPtr);
@@ -473,7 +472,7 @@ export class PairExpr extends SExpr {
                 const ref = scope.lookup(name.name);
                 if (ref === null)
                     throw new BuildError(name.range, "symbol not found: " + name.name);
-                return new AssignNode(this.range, ref, body);
+                return new AssignSyntax(this.range, ref, body);
             }
             case "begin":
                 return buildSequenceFromList(scope, form.bodyList);
@@ -481,23 +480,23 @@ export class PairExpr extends SExpr {
                 const inner = new LexicalScope(scope);
                 const bindings = buildLetrecDefs(inner, form.defs);
                 const body = form.body.build(inner);
-                return new LetrecNode(this.range, inner, bindings, body);
+                return new LetrecSyntax(this.range, inner, bindings, body);
             }
             case "throw": {
                 const expr = form.expr.build(scope);
-                return new ThrowNode(this.range, expr);
+                return new ThrowSyntax(this.range, expr);
             }
             case "try": {
                 const tryBody = form.tryBody.build(scope);
                 const catchBody = form.catchBody.build(scope);
-                if (!(catchBody instanceof LambdaNode))
+                if (!(catchBody instanceof LambdaSyntax))
                     throw new BuildError(form.catchBody.range, "catch must be a lambda expression");
                 if (catchBody.variables.length !== 1)
                     throw new BuildError(form.catchBody.range, "catch must accept exactly one argument");
-                return new TryNode(this.range, tryBody, catchBody);
+                return new TrySyntax(this.range, tryBody, catchBody);
             }
             case "input":
-                return new InputNode(this.range, form.name.name);
+                return new InputSyntax(this.range, form.name.name);
             case "apply":
                 break;
             default:
@@ -510,7 +509,7 @@ export class PairExpr extends SExpr {
         const first = items[0];
         const proc = first.build(scope);
         const args = items.slice(1).map(a => a.build(scope));
-        return new ApplyNode(this.range, proc, args);
+        return new ApplySyntax(this.range, proc, args);
     }
 }
 
@@ -539,24 +538,24 @@ function buildLetrecDefs(inner: LexicalScope, defs: LetrecDef[]): LetrecBinding[
     return result;
 }
 
-export function buildSequenceFromList(scope: LexicalScope, list: PairExpr): ASTNode {
+export function buildSequenceFromList(scope: LexicalScope, list: PairExpr): Syntax {
     const first = list.car.build(scope);
     if (list.cdr instanceof NilExpr) {
         return first;
     }
     else if (list.cdr instanceof PairExpr) {
         const rest = buildSequenceFromList(scope, list.cdr);
-        return new SequenceNode(list.range, first, rest);
+        return new SequenceSyntax(list.range, first, rest);
     }
     else {
         throw new BuildError(list.cdr.range, "Expected a list");
     }
 }
 
-function buildLambda(range: SourceRange, scope: LexicalScope, names: SymbolExpr[], body: PairExpr): LambdaNode {
+function buildLambda(range: SourceRange, scope: LexicalScope, names: SymbolExpr[], body: PairExpr): LambdaSyntax {
     const innerScope = makeInnerScope(scope, names);
-    const bodyNode = buildSequenceFromList(innerScope, body);
-    return new LambdaNode(range, names.map(e => e.name), innerScope, bodyNode);
+    const bodySyntax = buildSequenceFromList(innerScope, body);
+    return new LambdaSyntax(range, names.map(e => e.name), innerScope, bodySyntax);
 }
 
 function makeInnerScope(outer: LexicalScope, symbols: SymbolExpr[]): LexicalScope {
@@ -610,7 +609,7 @@ export class NilExpr extends LeafExpr {
         output.push("'()");
     }
 
-    public build(scope: LexicalScope): ASTNode {
+    public build(scope: LexicalScope): Syntax {
         throw new BuildError(this.range, "Unexpected nil");
     }
 }
@@ -642,7 +641,7 @@ export class UnspecifiedExpr extends LeafExpr {
         output.push("*unspecified*");
     }
 
-    public build(scope: LexicalScope): ASTNode {
-        return new ConstantNode(this.range, this);
+    public build(scope: LexicalScope): Syntax {
+        return new ConstantSyntax(this.range, this);
     }
 }

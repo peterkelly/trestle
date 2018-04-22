@@ -137,7 +137,7 @@ export function parseSpecialForm(list: PairExpr): SpecialForm {
             //     if (formals instanceof SymbolExpr) {
             //         const innerScope = makeInnerScope(scope, [formals]);
             //         const body = items[2].build(innerScope);
-            //         return new DefineNode(formals.name, body);
+            //         return new DefineSyntax(formals.name, body);
             //     } else {
             //         const allNames = getFormalParameterNames(formals);
             //         if (allNames.length === 0)
@@ -145,7 +145,7 @@ export function parseSpecialForm(list: PairExpr): SpecialForm {
             //         const defName = allNames[0];
             //         const paramNames = allNames.slice(1);
             //         const lambda = buildLambda(this.range, scope, paramNames, items[2]);
-            //         return new DefineNode(defName.name, lambda);
+            //         return new DefineSyntax(defName.name, lambda);
             //     }
             // }
             case "lambda": {

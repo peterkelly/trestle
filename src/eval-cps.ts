@@ -16,26 +16,26 @@ import { SourceRange } from "./source";
 import { BuildError } from "./sexpr";
 import { Value, PairValue, NilValue, ErrorValue, UnspecifiedValue } from "./value";
 import { Environment, Continuation, SchemeException } from "./runtime";
-import { ASTNode, ApplyNode, LetrecNode, LambdaProcedureValue } from "./ast";
+import { Syntax, ApplySyntax, LetrecSyntax, LambdaProcedureValue } from "./ast";
 import { evalDirect } from "./eval-direct";
 import { BuiltinProcedureValue } from "./builtins";
 
-export function evalCps(node: ASTNode, env: Environment, succeed: Continuation, fail: Continuation): void {
-    switch (node.kind) {
+export function evalCps(syntax: Syntax, env: Environment, succeed: Continuation, fail: Continuation): void {
+    switch (syntax.kind) {
         case "constant": {
-            succeed(node.value.toValue());
+            succeed(syntax.value.toValue());
             break;
         }
         case "try": {
-            evalCps(node.tryBody, env,
+            evalCps(syntax.tryBody, env,
                 // success continuation
                 (value: Value): void => {
                     succeed(value);
                 },
                 // failure continuation
                 (value: Value): void => {
-                    const proc = new LambdaProcedureValue(env, node.catchBody);
-                    evalLambdaCps(proc, [value], node.range, succeed, fail);
+                    const proc = new LambdaProcedureValue(env, syntax.catchBody);
+                    evalLambdaCps(proc, [value], syntax.range, succeed, fail);
                 });
             break;
         }
@@ -44,49 +44,49 @@ export function evalCps(node: ASTNode, env: Environment, succeed: Continuation, 
             // call fail with the computed value.
             // If the throw fails (another exception occurred while trying to evaluate the expression),
             // then we call fail with that exception. Either way, we fail.
-            evalCps(node.body, env, fail, fail);
+            evalCps(syntax.body, env, fail, fail);
             break;
         }
         case "assign": {
             const succeed2: Continuation = (value: Value): void => {
-                const variable = env.resolveRef(node.ref, node.range);
+                const variable = env.resolveRef(syntax.ref, syntax.range);
                 variable.value = value;
                 succeed(UnspecifiedValue.instance);
             };
-            evalCps(node.body, env, succeed2, fail);
+            evalCps(syntax.body, env, succeed2, fail);
             break;
         }
         case "if": {
             const succeed2: Continuation = (value: Value): void => {
                 if (value.isTrue())
-                    evalCps(node.consequent, env, succeed, fail);
+                    evalCps(syntax.consequent, env, succeed, fail);
                 else
-                    evalCps(node.alternative, env, succeed, fail);
+                    evalCps(syntax.alternative, env, succeed, fail);
             };
-            evalCps(node.condition, env, succeed2, fail);
+            evalCps(syntax.condition, env, succeed2, fail);
             break;
         }
         case "lambda": {
-            succeed(new LambdaProcedureValue(env, node));
+            succeed(new LambdaProcedureValue(env, syntax));
             break;
         }
         case "sequence": {
             const succeed2: Continuation = (value: Value): void => {
-                evalCps(node.next, env, succeed, fail);
+                evalCps(syntax.next, env, succeed, fail);
             };
-            evalCps(node.body, env, succeed2, fail);
+            evalCps(syntax.body, env, succeed2, fail);
             break;
         }
         case "apply": {
             const succeed2: Continuation = (procValue: Value): void => {
-                evalCpsArg(node, procValue, 0, NilValue.instance, env, succeed, fail);
+                evalCpsArg(syntax, procValue, 0, NilValue.instance, env, succeed, fail);
             };
-            evalCps(node.proc, env, succeed2, fail);
+            evalCps(syntax.proc, env, succeed2, fail);
             break;
         }
         case "variable": {
             try {
-                succeed(evalDirect(node, env));
+                succeed(evalDirect(syntax, env));
             }
             catch (e) {
                 if (e instanceof SchemeException)
@@ -97,36 +97,36 @@ export function evalCps(node: ASTNode, env: Environment, succeed: Continuation, 
             break;
         }
         case "letrec": {
-            const innerEnv = new Environment(node.innerScope, env);
-            evalCpsBinding(node, 0, NilValue.instance, innerEnv, succeed, fail);
+            const innerEnv = new Environment(syntax.innerScope, env);
+            evalCpsBinding(syntax, 0, NilValue.instance, innerEnv, succeed, fail);
             break;
         }
         case "input": {
-            throw new BuildError(node.range, "InputNode.evalCps() not implemented");
+            throw new BuildError(syntax.range, "InputSyntax.evalCps() not implemented");
         }
         default: {
-            throw new Error("Unknown node type: " + (<any> node).constructor.name);
+            throw new Error("Unknown syntax type: " + (<any> syntax).constructor.name);
         }
     }
 }
 
 function evalCpsArg(
-    node: ApplyNode, procValue: Value, argno: number, prev: Value, env: Environment,
+    syntax: ApplySyntax, procValue: Value, argno: number, prev: Value, env: Environment,
     succeed: Continuation, fail: Continuation): void {
-    if (argno >= node.args.length) {
-        evalCpsProc(node, procValue, prev, env, succeed, fail);
+    if (argno >= syntax.args.length) {
+        evalCpsProc(syntax, procValue, prev, env, succeed, fail);
         return;
     }
 
     const succeed2: Continuation = (argValue: Value): void => {
         const lst = new PairValue(argValue, prev);
-        evalCpsArg(node, procValue, argno + 1, lst, env, succeed, fail);
+        evalCpsArg(syntax, procValue, argno + 1, lst, env, succeed, fail);
     };
-    evalCps(node.args[argno], env, succeed2, fail);
+    evalCps(syntax.args[argno], env, succeed2, fail);
 }
 
 export function evalCpsProc(
-    node: ApplyNode, procValue: Value, argList: Value, env: Environment,
+    syntax: ApplySyntax, procValue: Value, argList: Value, env: Environment,
     succeed: Continuation, fail: Continuation): void {
     const argArray = backwardsListToArray(argList);
 
@@ -134,11 +134,11 @@ export function evalCpsProc(
         procValue.proc(argArray, succeed, fail);
     }
     else if (procValue instanceof LambdaProcedureValue) {
-        evalLambdaCps(procValue, argArray, node.range, succeed, fail);
+        evalLambdaCps(procValue, argArray, syntax.range, succeed, fail);
     }
     else {
         const msg = "Cannot apply " + procValue;
-        const error = new BuildError(node.range, msg);
+        const error = new BuildError(syntax.range, msg);
         fail(new ErrorValue(error));
         return;
     }
@@ -147,9 +147,9 @@ export function evalCpsProc(
 export function evalLambdaCps(procValue: LambdaProcedureValue, argArray: Value[], range: SourceRange,
     succeed: Continuation, fail: Continuation): void {
     const outerEnv = procValue.env;
-    const lambdaNode = procValue.proc;
+    const lambdaSyntax = procValue.proc;
 
-    const expectedArgCount = lambdaNode.variables.length;
+    const expectedArgCount = lambdaSyntax.variables.length;
     const actualArgCount = argArray.length;
     if (actualArgCount !== expectedArgCount) {
         const msg = "Incorrect number of arguments; have " + actualArgCount + ", expected " + expectedArgCount;
@@ -158,31 +158,31 @@ export function evalLambdaCps(procValue: LambdaProcedureValue, argArray: Value[]
         return;
     }
 
-    const innerEnv = new Environment(lambdaNode.innerScope, outerEnv, argArray);
+    const innerEnv = new Environment(lambdaSyntax.innerScope, outerEnv, argArray);
     evalCps(procValue.proc.body, innerEnv, succeed, fail);
 }
 
 function evalCpsBinding(
-    node: LetrecNode, bindingIndex: number, prev: Value, innerEnv: Environment,
+    syntax: LetrecSyntax, bindingIndex: number, prev: Value, innerEnv: Environment,
     succeed: Continuation, fail: Continuation): void {
-    if (bindingIndex >= node.bindings.length) {
-        evalCpsBody(node, prev, innerEnv, succeed, fail);
+    if (bindingIndex >= syntax.bindings.length) {
+        evalCpsBody(syntax, prev, innerEnv, succeed, fail);
         return;
     }
 
     const succeed2: Continuation = (value: Value): void => {
         const lst = new PairValue(value, prev);
-        evalCpsBinding(node, bindingIndex + 1, lst, innerEnv, succeed, fail);
+        evalCpsBinding(syntax, bindingIndex + 1, lst, innerEnv, succeed, fail);
     };
-    evalCps(node.bindings[bindingIndex].body, innerEnv, succeed2, fail);
+    evalCps(syntax.bindings[bindingIndex].body, innerEnv, succeed2, fail);
 }
 
 function evalCpsBody(
-    node: LetrecNode, bindingList: Value, innerEnv: Environment,
+    syntax: LetrecSyntax, bindingList: Value, innerEnv: Environment,
     succeed: Continuation, fail: Continuation): void {
     const bindingArray = backwardsListToArray(bindingList);
     innerEnv.setVariableValues(bindingArray);
-    evalCps(node.body, innerEnv, succeed, fail);
+    evalCps(syntax.body, innerEnv, succeed, fail);
 }
 
 function backwardsListToArray(list: Value): Value[] {

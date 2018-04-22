@@ -25,16 +25,16 @@ import {
     ErrorValue,
 } from "./value";
 import {
-    ASTNode,
-    ConstantNode,
-    AssignNode,
-    IfNode,
+    Syntax,
+    ConstantSyntax,
+    AssignSyntax,
+    IfSyntax,
     LambdaProcedureValue,
-    LambdaNode,
-    SequenceNode,
-    ApplyNode,
-    VariableNode,
-    LetrecNode,
+    LambdaSyntax,
+    SequenceSyntax,
+    ApplySyntax,
+    VariableSyntax,
+    LetrecSyntax,
 } from "./ast";
 
 const allInputs = new Map<string, InputDataflowNode>();
@@ -185,10 +185,10 @@ export class EnvSlotDataflowNode extends DataflowNode {
 
 export class ConstantDataflowNode extends DataflowNode {
     public readonly _class_ConstantDataflowNode: any;
-    public constructor(public ast: ConstantNode, public env: Environment) {
+    public constructor(public syntax: ConstantSyntax, public env: Environment) {
         super();
 
-        this.value = this.ast.value.toValue();
+        this.value = this.syntax.value.toValue();
     }
 
     public reevaluate(): void {
@@ -203,11 +203,11 @@ export class ConstantDataflowNode extends DataflowNode {
 export class AssignDataflowNode extends DataflowNode {
     public readonly _class_AssignDataflowNode: any;
 
-    public constructor(public ast: AssignNode, public env: Environment) {
+    public constructor(public syntax: AssignSyntax, public env: Environment) {
         super();
 
-        const node = createDataflowNode(this.ast.body, env);
-        const variable = env.resolveRef(this.ast.ref, this.ast.range);
+        const node = createDataflowNode(this.syntax.body, env);
+        const variable = env.resolveRef(this.syntax.ref, this.syntax.range);
         variable.node = node;
         this.value = UnspecifiedValue.instance;
     }
@@ -227,17 +227,17 @@ export class IfDataflowNode extends DataflowNode {
     private isTrue: boolean;
     private branch: DataflowNode;
 
-    public constructor(public ast: IfNode, public env: Environment) {
+    public constructor(public syntax: IfSyntax, public env: Environment) {
         super();
 
-        this.cond = createDataflowNode(this.ast.condition, this.env);
+        this.cond = createDataflowNode(this.syntax.condition, this.env);
         this.cond.addOutput(this);
         this.isTrue = this.cond.value.isTrue();
 
         if (this.isTrue)
-            this.branch = createDataflowNode(this.ast.consequent, this.env);
+            this.branch = createDataflowNode(this.syntax.consequent, this.env);
         else
-            this.branch = createDataflowNode(this.ast.alternative, this.env);
+            this.branch = createDataflowNode(this.syntax.alternative, this.env);
         this.branch.addOutput(this);
         this.value = this.branch.value;
     }
@@ -248,9 +248,9 @@ export class IfDataflowNode extends DataflowNode {
             this.branch.removeOutput(this);
             this.isTrue = this.cond.value.isTrue();
             if (this.isTrue)
-                this.branch = createDataflowNode(this.ast.consequent, this.env);
+                this.branch = createDataflowNode(this.syntax.consequent, this.env);
             else
-                this.branch = createDataflowNode(this.ast.alternative, this.env);
+                this.branch = createDataflowNode(this.syntax.alternative, this.env);
             this.branch.addOutput(this);
             this.markOutputsAsDirty();
         }
@@ -267,10 +267,10 @@ export class IfDataflowNode extends DataflowNode {
 export class LambdaDataflowNode extends DataflowNode {
     public readonly _class_LambdaDataflowNode: any;
 
-    public constructor(public ast: LambdaNode, public env: Environment) {
+    public constructor(public syntax: LambdaSyntax, public env: Environment) {
         super();
 
-        this.value = new LambdaProcedureValue(this.env, this.ast);
+        this.value = new LambdaProcedureValue(this.env, this.syntax);
     }
 
     public reevaluate(): void {
@@ -286,11 +286,11 @@ export class SequenceDataflowNode extends DataflowNode {
     public readonly _class_SequenceDataflowNode: any;
     private next: DataflowNode;
 
-    public constructor(public ast: SequenceNode, public env: Environment) {
+    public constructor(public syntax: SequenceSyntax, public env: Environment) {
         super();
 
-        createDataflowNode(this.ast.body, this.env);
-        this.next = createDataflowNode(this.ast.next, this.env);
+        createDataflowNode(this.syntax.body, this.env);
+        this.next = createDataflowNode(this.syntax.next, this.env);
         this.next.addOutput(this);
         this.value = this.next.value;
     }
@@ -372,15 +372,15 @@ export class ApplyDataflowNode extends DataflowNode {
     private call: DataflowNode;
     private args: DataflowNode[];
 
-    public constructor(public ast: ApplyNode, public env: Environment) {
+    public constructor(public syntax: ApplySyntax, public env: Environment) {
         super();
 
-        this.proc = createDataflowNode(this.ast.proc, this.env);
+        this.proc = createDataflowNode(this.syntax.proc, this.env);
         this.proc.addOutput(this);
         this.procValue = this.proc.value;
-        this.args = this.ast.args.map(arg => createDataflowNode(arg, this.env));
+        this.args = this.syntax.args.map(arg => createDataflowNode(arg, this.env));
 
-        this.call = createCallNode(this.procValue, this.args, this.ast.range);
+        this.call = createCallNode(this.procValue, this.args, this.syntax.range);
         this.call.addOutput(this);
         this.value = this.call.value;
     }
@@ -400,7 +400,7 @@ export class ApplyDataflowNode extends DataflowNode {
         if (this.procValue !== this.proc.value) {
             this.procValue = this.proc.value;
             this.call.removeOutput(this);
-            this.call = createCallNode(this.procValue, this.args, this.ast.range);
+            this.call = createCallNode(this.procValue, this.args, this.syntax.range);
             this.call.addOutput(this);
         }
 
@@ -417,10 +417,10 @@ export class VariableDataflowNode extends DataflowNode {
     public readonly _class_VariableDataflowNode: any;
     private node: DataflowNode;
 
-    public constructor(public ast: VariableNode, public env: Environment) {
+    public constructor(public syntax: VariableSyntax, public env: Environment) {
         super();
 
-        this.node = this.env.resolveRef(this.ast.ref, this.ast.range).node;
+        this.node = this.env.resolveRef(this.syntax.ref, this.syntax.range).node;
         this.node.addOutput(this);
         this.value = this.node.value;
     }
@@ -438,16 +438,16 @@ export class LetrecDataflowNode extends DataflowNode {
     public readonly _class_LetrecDataflowNode: any;
     private body: DataflowNode;
 
-    public constructor(ast: LetrecNode, env: Environment) {
+    public constructor(syntax: LetrecSyntax, env: Environment) {
         super();
 
-        const innerEnv = new Environment(ast.innerScope, env);
+        const innerEnv = new Environment(syntax.innerScope, env);
         const bindingArray: DataflowNode[] = [];
-        for (const binding of ast.bindings)
+        for (const binding of syntax.bindings)
             bindingArray.push(createDataflowNode(binding.body, innerEnv));
         innerEnv.setVariableDataflowNodes(bindingArray);
 
-        this.body = createDataflowNode(ast.body, innerEnv);
+        this.body = createDataflowNode(syntax.body, innerEnv);
         this.body.addOutput(this);
         this.value = this.body.value;
     }
@@ -478,29 +478,29 @@ export class InputDataflowNode extends DataflowNode {
     }
 }
 
-export function createDataflowNode(node: ASTNode, env: Environment): DataflowNode {
-    switch (node.kind) {
+export function createDataflowNode(syntax: Syntax, env: Environment): DataflowNode {
+    switch (syntax.kind) {
         case "constant":
-            return new ConstantDataflowNode(node, env);
+            return new ConstantDataflowNode(syntax, env);
         case "try":
-            throw new BuildError(node.range, "Exceptions are unsupported in reactive evaluation mode");
+            throw new BuildError(syntax.range, "Exceptions are unsupported in reactive evaluation mode");
         case "throw":
-            throw new BuildError(node.range, "Exceptions are unsupported in reactive evaluation mode");
+            throw new BuildError(syntax.range, "Exceptions are unsupported in reactive evaluation mode");
         case "assign":
-            return new AssignDataflowNode(node, env);
+            return new AssignDataflowNode(syntax, env);
         case "if":
-            return new IfDataflowNode(node, env);
+            return new IfDataflowNode(syntax, env);
         case "lambda":
-            return new LambdaDataflowNode(node, env);
+            return new LambdaDataflowNode(syntax, env);
         case "sequence":
-            return new SequenceDataflowNode(node, env);
+            return new SequenceDataflowNode(syntax, env);
         case "apply":
-            return new ApplyDataflowNode(node, env);
+            return new ApplyDataflowNode(syntax, env);
         case "variable":
-            return new VariableDataflowNode(node, env);
+            return new VariableDataflowNode(syntax, env);
         case "letrec":
-            return new LetrecDataflowNode(node, env);
+            return new LetrecDataflowNode(syntax, env);
         case "input":
-            return getInput(node.name);
+            return getInput(syntax.name);
     }
 }

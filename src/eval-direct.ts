@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { ASTNode, LambdaProcedureValue } from "./ast";
+import { Syntax, LambdaProcedureValue } from "./ast";
 import { BuildError } from "./sexpr";
 import { SourceRange } from "./source";
 import { Value, ErrorValue, UnspecifiedValue } from "./value";
@@ -27,26 +27,26 @@ export function disableEvalDirect(): void {
     evalDirectEnabled = false;
 }
 
-function checkEvalDirectEnabled(node: ASTNode): void {
+function checkEvalDirectEnabled(syntax: Syntax): void {
     if (!evalDirectEnabled)
-        throw new Error("Attempt to call evalDirect with " + node.kind + " node");
+        throw new Error("Attempt to call evalDirect with " + syntax.kind + " syntax");
 }
 
-export function evalDirect(node: ASTNode, env: Environment): Value {
-    checkEvalDirectEnabled(node);
-    switch (node.kind) {
+export function evalDirect(syntax: Syntax, env: Environment): Value {
+    checkEvalDirectEnabled(syntax);
+    switch (syntax.kind) {
         case "constant": {
-            return node.value.toValue();
+            return syntax.value.toValue();
         }
         case "try": {
             try {
-                return evalDirect(node.tryBody, env);
+                return evalDirect(syntax.tryBody, env);
             }
             catch (e) {
                 if (e instanceof SchemeException) {
                     const value = e.value;
-                    const proc = new LambdaProcedureValue(env, node.catchBody);
-                    return evalLambdaDirect(proc, [value], node.range);
+                    const proc = new LambdaProcedureValue(env, syntax.catchBody);
+                    return evalLambdaDirect(proc, [value], syntax.range);
                 }
                 else {
                     throw e;
@@ -54,34 +54,34 @@ export function evalDirect(node: ASTNode, env: Environment): Value {
             }
         }
         case "throw": {
-            const value = evalDirect(node.body, env);
+            const value = evalDirect(syntax.body, env);
             throw new SchemeException(value);
         }
         case "assign": {
-            const value = evalDirect(node.body, env);
-            const variable = env.resolveRef(node.ref, node.range);
+            const value = evalDirect(syntax.body, env);
+            const variable = env.resolveRef(syntax.ref, syntax.range);
             variable.value = value;
             return UnspecifiedValue.instance;
         }
         case "if": {
-            const condValue = evalDirect(node.condition, env);
+            const condValue = evalDirect(syntax.condition, env);
             if (condValue.isTrue())
-                return evalDirect(node.consequent, env);
+                return evalDirect(syntax.consequent, env);
             else
-                return evalDirect(node.alternative, env);
+                return evalDirect(syntax.alternative, env);
         }
         case "lambda": {
-            return new LambdaProcedureValue(env, node);
+            return new LambdaProcedureValue(env, syntax);
         }
         case "sequence": {
-            evalDirect(node.body, env);
-            return evalDirect(node.next, env);
+            evalDirect(syntax.body, env);
+            return evalDirect(syntax.next, env);
         }
         case "apply": {
-            const procValue: Value = evalDirect(node.proc, env);
+            const procValue: Value = evalDirect(syntax.proc, env);
             const argArray: Value[] = [];
-            for (let i = 0; i < node.args.length; i++) {
-                const arg = node.args[i];
+            for (let i = 0; i < syntax.args.length; i++) {
+                const arg = syntax.args[i];
                 argArray.push(evalDirect(arg, env));
             }
 
@@ -89,37 +89,37 @@ export function evalDirect(node: ASTNode, env: Environment): Value {
                 return procValue.direct(argArray);
             }
             else if (procValue instanceof LambdaProcedureValue) {
-                return evalLambdaDirect(procValue, argArray, node.range);
+                return evalLambdaDirect(procValue, argArray, syntax.range);
             }
             else {
                 const msg = "Cannot apply " + procValue;
-                const error = new BuildError(node.range, msg);
+                const error = new BuildError(syntax.range, msg);
                 throw new SchemeException(new ErrorValue(error));
             }
         }
         case "variable": {
-            const variable = env.resolveRef(node.ref, node.range);
+            const variable = env.resolveRef(syntax.ref, syntax.range);
             return variable.value;
         }
         case "letrec": {
-            const innerEnv = new Environment(node.innerScope, env);
+            const innerEnv = new Environment(syntax.innerScope, env);
             const bindingArray: Value[] = [];
-            for (const binding of node.bindings)
+            for (const binding of syntax.bindings)
                 bindingArray.push(evalDirect(binding.body, innerEnv));
             innerEnv.setVariableValues(bindingArray);
-            return evalDirect(node.body, innerEnv);
+            return evalDirect(syntax.body, innerEnv);
         }
         case "input": {
-            throw new BuildError(node.range, "InputNode.evalDirect() not implemented");
+            throw new BuildError(syntax.range, "InputSyntax.evalDirect() not implemented");
         }
     }
 }
 
 export function evalLambdaDirect(procValue: LambdaProcedureValue, argArray: Value[], range: SourceRange): Value {
     const outerEnv = procValue.env;
-    const lambdaNode = procValue.proc;
+    const lambdaSyntax = procValue.proc;
 
-    const expectedArgCount = lambdaNode.variables.length;
+    const expectedArgCount = lambdaSyntax.variables.length;
     const actualArgCount = argArray.length;
     if (actualArgCount !== expectedArgCount) {
         const msg = "Incorrect number of arguments; have " + actualArgCount + ", expected " + expectedArgCount;
@@ -127,6 +127,6 @@ export function evalLambdaDirect(procValue: LambdaProcedureValue, argArray: Valu
         throw new SchemeException(new ErrorValue(error));
     }
 
-    const innerEnv = new Environment(lambdaNode.innerScope, outerEnv, argArray);
+    const innerEnv = new Environment(lambdaSyntax.innerScope, outerEnv, argArray);
     return evalDirect(procValue.proc.body, innerEnv);
 }
