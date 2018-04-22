@@ -122,6 +122,12 @@ function num_mod(args: number[]): number {
     return args[0] % args[1];
 }
 
+function num_sqrt(args: number[]): number {
+    if (args.length !== 1)
+        throw new Error("sqrt reuqires exactly one argument");
+    return Math.sqrt(args[0]);
+}
+
 function wrapNumeric(fun: NumericBuiltin): BuiltinDirect {
     return (args: Value[]): Value => {
         try {
@@ -183,6 +189,7 @@ const builtin_subtract = wrapNumeric(num_subtract);
 const builtin_multiply = wrapNumeric(num_multiply);
 const builtin_divide = wrapNumeric(num_divide);
 const builtin_mod = wrapNumeric(num_mod);
+const builtin_sqrt = wrapNumeric(num_sqrt);
 
 const builtin_ne = wrapNumRelational(num_ne);
 const builtin_lt = wrapNumRelational(num_lt);
@@ -387,6 +394,7 @@ export const builtins: { [name: string]: BuiltinDirect } = {
     "*": builtin_multiply,
     "/": builtin_divide,
     "mod": builtin_mod,
+    "sqrt": builtin_sqrt,
     "!=": builtin_ne,
     "<": builtin_lt,
     "<=": builtin_le,

@@ -24,6 +24,7 @@ import { simplify } from "./simplify";
 import { evalDirect, disableEvalDirect } from "./eval-direct";
 import { evalCps } from "./eval-cps";
 import { createInput, updateInput, reevaluateDataflowGraph, createDataflowNode } from "./dataflow";
+import { evalTracing } from "./eval-tracing";
 
 function showBuildError(e: BuildError, filename: string, input: string): void {
     const sinput = new SourceInput(input);
@@ -58,6 +59,7 @@ enum EvalKind {
     Direct,
     CPS,
     Reactive,
+    Tracing,
 }
 
 enum Transformations {
@@ -95,6 +97,9 @@ function parseCommandLineOptions(args: string[]): Options {
             }
             else if (args[argno] === "--eval-reactive") {
                 options.evalKind = EvalKind.Reactive;
+            }
+            else if (args[argno] === "--eval-tracing") {
+                options.evalKind = EvalKind.Tracing;
             }
             else if (args[argno] === "--test") {
                 options.testCoordsOnly = true;
@@ -265,6 +270,20 @@ function main(): void {
                 }
                 catch (e) {
                     showError("REACTIVE Failure: ", e, filename, input);
+                }
+            }
+            else if (options.evalKind === EvalKind.Tracing) {
+                try {
+                    disableEvalDirect();
+                    createInput("test", new NumberValue(0));
+                    const trace = evalTracing(built, topLevelEnv);
+                    const lines: string[] = [];
+                    trace.print(lines, "", "");
+                    console.log(lines.join("\n"));
+                    console.log("TRACING Success: " + trace.value);
+                }
+                catch (e) {
+                    showError("TRACING Failure: ", e, filename, input);
                 }
             }
         }
